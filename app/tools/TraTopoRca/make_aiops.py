@@ -6,20 +6,21 @@ make_aiops_v5.py - 独立阶段A数据处理
 - 测试集：90%正常数据 + 10%异常数据（服务异常:节点异常=1:1）
 - 所有参数可通过命令行控制
 """
-import argparse, os, json, random, time
+import argparse, os, json, random, hashlib, time
 from typing import Optional, List, Dict, Tuple
+from collections import defaultdict, Counter
 import pandas as pd
 import numpy as np
 from tqdm import tqdm
 
 # ======= 默认路径/超参 =======
-NORMAL_DIR = 'E:\ZJU\AIOps\Projects\TraDNN\dataset/06-08/2025-06-08_normal_traces.csv'
-SERVICE_DIR = 'E:\ZJU\AIOps\Projects\TraDNN\dataset/06-08/2025-06-08_service.csv'
-NODE_DIR    = 'E:\ZJU\AIOps\Projects\TraDNN\dataset/06-08/2025-06-08_node.csv'
-OUT_DIR     = 'dataset/dataset_08/raw'
+NORMAL_DIR = '/root/wzc/aiops25/SplitTrace0611/normal/2025-06-08_09_10_11_normal_traces.csv'
+SERVICE_DIR = '/root/wzc/aiops25/SplitTrace0611/service/2025-06-08_09_10_11_spans.csv'
+NODE_DIR    = '/root/wzc/aiops25/SplitTrace0611/node/2025-06-08_09_10_11_spans.csv'
+OUT_DIR     = 'dataset/dataset_08_09_10_11/raw'
 
 # 新的默认参数
-TOTAL_TRACES_DEFAULT = 60000        # 总trace数量
+TOTAL_TRACES_DEFAULT = 100000        # 总trace数量
 TRAIN_RATIO = 0.7                    # 训练集比例
 VAL_RATIO = 0.1                      # 验证集比例  
 TEST_RATIO = 0.2                     # 测试集比例
@@ -113,6 +114,10 @@ def filter_multi_root_traces(df: pd.DataFrame,
     n_after = df[trace_col].nunique()
     print(f"    过滤多根trace: {n_before} -> {n_after} (剔除 {len(drop_traces)} traces)")
     return df
+
+def md5mod(s: str, mod=100) -> int:
+    h = hashlib.md5(s.strip().encode("utf-8")).hexdigest()
+    return int(h[:8], 16) % mod
 
 def url_template(u: str) -> str:
     if not isinstance(u, str): return "NA"

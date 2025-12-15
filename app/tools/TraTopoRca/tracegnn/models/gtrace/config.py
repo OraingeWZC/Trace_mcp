@@ -24,7 +24,7 @@ class ExpConfig(mltk.Config):
     # 模型权重保存/读取路径：
     # - 绝对路径：直接使用
     # - 相对路径：默认相对于 dataset_root_dir/dataset，例如 'save/model.pth'
-    model_path: str = 'save/model_rerank.pth'
+    model_path: str = 'save/tracebert/model.pth'
 
     # 报告输出目录（相对 processed 目录或绝对路径）
     report_dir: str = 'reports_1215'
@@ -43,7 +43,7 @@ class ExpConfig(mltk.Config):
         kl_weight: float = 1e-2
         n_z: int = 5
 
-        latency_model: str = 'tree'          # 延迟分支：tree / bert
+        latency_model: str = 'bert'          # 延迟分支：tree / bert
         structure_model: str = 'isoc_vgae'   # 结构分支：tree / isoc_vgae
 
         # TraceBERT 参数
@@ -59,7 +59,7 @@ class ExpConfig(mltk.Config):
         graph_embedding_size: int = 4
         decoder_feature_size: int = 4
 
-        latency_feature_size: int = 4        # tracebert设置为64，treelstm设置为4
+        latency_feature_size: int = 64        # tracebert设置为64，treelstm设置为4
         latency_gcn_layers: int = 5
         # 训练端：不确定性权重 log_sigma 的预热冻结轮数（0 表示不冻结）
         freeze_sigma_epochs: int = 4

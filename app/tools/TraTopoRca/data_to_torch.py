@@ -155,23 +155,23 @@ def process_test_dataset_fault_mapping(test_csv_path: str, id_manager: EnhancedT
 
 
 # 第二步：创建目录 dataset_c/processed
-print("\n第二步：创建目录 dataset/dataset_08/processed")
-os.makedirs('dataset/dataset_08/processed', exist_ok=True)
+print("\n第二步：创建目录 dataset/dataset_08_09_10_11/processed")
+os.makedirs('dataset/dataset_08_09_10_11/processed', exist_ok=True)
 
 # 第三步：为train_set.csv和test_set.csv建立统一的yml映射文件
 print("\n第三步：建立统一的yml映射文件")
 
 # 加载训练集和测试集
 print("正在加载训练集和测试集...")
-train_df = flexible_load_trace_csv('dataset/dataset_08/raw/train.csv')
-val_df = flexible_load_trace_csv('dataset/dataset_08/raw/val.csv')
-test_df = flexible_load_trace_csv('dataset/dataset_08/raw/test.csv')
+train_df = flexible_load_trace_csv('dataset/dataset_08_09_10_11/raw/train.csv')
+val_df = flexible_load_trace_csv('dataset/dataset_08_09_10_11/raw/val.csv')
+test_df = flexible_load_trace_csv('dataset/dataset_08_09_10_11/raw/test.csv')
 
 # 合并数据集用于创建统一的ID映射
 combined_df = pd.concat([train_df, val_df, test_df], ignore_index=True)
 
 # 先创建一个临时目录用于生成ID映射
-temp_dir = 'dataset/dataset_08/temp_id_generation'
+temp_dir = 'dataset/dataset_08_09_10_11/temp_id_generation'
 os.makedirs(temp_dir, exist_ok=True)
 
 # 创建增强的ID管理器并生成ID映射
@@ -184,9 +184,9 @@ with id_manager:
         id_manager.operation_id.get_or_assign(row.OperationName or '')
         id_manager.status_id.get_or_assign(row.StatusCode or '')
 
-# 保存映射文件到 dataset/dataset_08/processed 目录
-id_manager.dump_to('dataset/dataset_08/processed')
-print("映射文件已保存到 dataset/dataset_08/processed 目录")
+# 保存映射文件到 dataset/dataset_08_09_10_11/processed 目录
+id_manager.dump_to('dataset/dataset_08_09_10_11/processed')
+print("映射文件已保存到 dataset/dataset_08_09_10_11/processed 目录")
 
 # 第四步：将train_set.csv转换为db文件，保存在train文件夹下
 print("\n第四步：将train.csv转换为db文件")
@@ -282,12 +282,12 @@ def modified_convert_csv_to_db(csv_file: str, output_dir: str, id_manager=None, 
 if __name__ == '__main__':
     
     # 重新创建一个指向最终目录的增强版ID管理器
-    final_id_manager = EnhancedTraceGraphIDManager('dataset/dataset_08/processed')
+    final_id_manager = EnhancedTraceGraphIDManager('dataset/dataset_08_09_10_11/processed')
 
     # 使用修改版的函数处理训练集，传入统一的ID管理器
     train_id_manager = modified_convert_csv_to_db(
-        csv_file='dataset/dataset_08/raw/train.csv',
-        output_dir='dataset/dataset_08/processed/train',
+        csv_file='dataset/dataset_08_09_10_11/raw/train.csv',
+        output_dir='dataset/dataset_08_09_10_11/processed/train',
         id_manager=final_id_manager,  # 传入统一的ID管理器
         min_node_count=2,
         max_node_count=100
@@ -298,8 +298,8 @@ if __name__ == '__main__':
 
     # 使用修改版的函数处理测试集，传入统一的ID管理器
     modified_convert_csv_to_db(
-        csv_file='dataset/dataset_08/raw/val.csv',
-        output_dir='dataset/dataset_08/processed/val',
+        csv_file='dataset/dataset_08_09_10_11/raw/val.csv',
+        output_dir='dataset/dataset_08_09_10_11/processed/val',
         id_manager=final_id_manager,
         min_node_count=2,
         max_node_count=100
@@ -308,7 +308,7 @@ if __name__ == '__main__':
     # 第六步：专门处理测试数据集的FaultCategory和RootCause
     print("\n第六步：处理测试数据集的RootCause和FaultCategory...")
     processed_test_df = process_test_dataset_fault_mapping(
-        test_csv_path='dataset/dataset_08/raw/test.csv',
+        test_csv_path='dataset/dataset_08_09_10_11/raw/test.csv',
         id_manager=final_id_manager
     )
 
@@ -317,8 +317,8 @@ if __name__ == '__main__':
 
     # 使用修改版的函数处理测试集，传入统一的ID管理器和处理后的DataFrame
     modified_convert_csv_to_db(
-        csv_file='dataset/dataset_08/raw/test.csv',
-        output_dir='dataset/dataset_08/processed/test',
+        csv_file='dataset/dataset_08_09_10_11/raw/test.csv',
+        output_dir='dataset/dataset_08_09_10_11/processed/test',
         id_manager=final_id_manager,
         min_node_count=2,
         max_node_count=100,
@@ -327,13 +327,13 @@ if __name__ == '__main__':
 
     # 再次保存ID映射文件到主目录，包含新的FaultCategory映射
     print("\n保存最终的ID映射文件到主目录...")
-    final_id_manager.dump_to('dataset/dataset_08/processed')
+    final_id_manager.dump_to('dataset/dataset_08_09_10_11/processed')
     print("已完成包含FaultCategory的ID映射文件保存")
 
     # 删除train和test文件夹下的yml映射文件，确保只保留主目录下的统一映射
     print("\n清理多余的映射文件...")
-    remove_yml_files('dataset/dataset_08/processed/train')
-    remove_yml_files('dataset/dataset_08/processed/test')
+    remove_yml_files('dataset/dataset_08_09_10_11/processed/train')
+    remove_yml_files('dataset/dataset_08_09_10_11/processed/test')
 
     # 现在所有操作都完成了，安全地清理临时目录
     if os.path.exists(temp_dir):

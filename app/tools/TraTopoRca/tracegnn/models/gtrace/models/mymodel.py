@@ -270,6 +270,43 @@ class MyTraceAnomalyModel(nn.Module):
         else:
             self.host_omni = None
 
+        # =========================================================
+        # [新增] 打印模型架构摘要，明确当前使用的组件
+        # =========================================================
+        print("\n" + "="*50)
+        print(" [Model Architecture Summary] ")
+        print("="*50)
+        
+        # 1. 结构分支
+        # 目前代码中结构分支固定为 ISOC_VGAE，这里直接打印
+        gnn_type = getattr(config.Model, 'structure_gnn', 'GIN')
+        print(f" > Structure Branch : ISOC_VGAE (GNN Type: {gnn_type})")
+        
+        # 2. 时延分支
+        self.latency_model_type = getattr(config.Model, 'latency_model', 'tree')
+        if self.latency_model_type == 'bert':
+            # 打印 TraceBERT 的关键参数，确认是否生效
+            print(f" > Latency Branch   : TraceBERT (Transformer)")
+            print(f"     |-- d_model    : {config.Model.latency_feature_size} (Should be >= 64)")
+            print(f"     |-- n_heads    : {getattr(config.Model, 'bert_n_heads', 4)}")
+            print(f"     |-- layers     : {getattr(config.Model, 'bert_n_layers', 2)}")
+        else:
+            print(f" > Latency Branch   : Tree-LSTM (Recursive)")
+            print(f"     |-- hidden_dim : {config.Model.latency_feature_size}")
+
+        # 3. 主机分支
+        if self.enable_host_channel:
+            backend_name = "Anomaly Transformer" if self.host_backend == 'anomaly_transformer' else "OmniAnomaly (GRU-VAE)"
+            print(f" > Host Branch      : {backend_name}")
+            if self.host_backend == 'anomaly_transformer':
+                hc_cfg = getattr(self.config, "HostChannel", None)
+                print(f"     |-- layers     : {getattr(hc_cfg, 'at_layers', 3)}")
+                print(f"     |-- heads      : {getattr(hc_cfg, 'at_heads', 8)}")
+        else:
+            print(f" > Host Branch      : [DISABLED]")
+            
+        print("="*50 + "\n")
+
     def sample_z(self, z_mu: torch.Tensor, z_logvar: torch.Tensor) -> torch.Tensor:
         # Sample eps from N (0, I)
         eps = torch.randn_like(z_mu)

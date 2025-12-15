@@ -1,0 +1,14 @@
+# MCP 协议与服务
+mcp>=1.0.0
+pydantic>=2.4.0
+
+# 核心工具库
+packaging>=23.0
+PyYAML>=6.0
+pydantic>=2.4.0
+
+# 数据科学基础库
+numpy>=1.26.0
+pandas>=2.2.0
+tqdm>=4.66.0
+scikit-learn>=1.3.0

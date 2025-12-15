@@ -1,0 +1,21 @@
+=== Starting Command ===
+['D:\\School\\Anaconda\\envs\\py310\\python.exe', '-u', 'E:\\ZJU\\AIOps\\Projects\\TraDNN\\Trace_mcp\\app\\tools\\trace_svnd_diag\\debug_check_svnd.py']
+
+Environment PATH prefix:
+D:\School\Anaconda\envs\py310\Library\bin;D:\School\Anaconda\envs\py310\Scripts;D:\School\Anaconda\envs\py310;E:\VMware\bin\;C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem;C:\Windows\System32\WindowsPowerShell\v1.0\;C:\Windows\System32\OpenSSH\;C:\Program Files (x86)\NVIDIA Corporation\Phys...
+
+=== DEBUG PROBE START ===
+PID: 15836
+Python Executable: D:\School\Anaconda\envs\py310\python.exe
+CWD: E:\ZJU\AIOps\Projects\TraDNN\Trace_mcp\app\tools\trace_svnd_diag
+
+[Env Check]
+SUCCESS: 'Library\bin' found in PATH.
+
+[Import Check]
+-> Importing numpy... OK
+-> Importing torch (Critical)... OK
+   Torch Version: 2.3.0+cpu
+   CUDA Available: False
+
+=== DEBUG PROBE FINISHED ===

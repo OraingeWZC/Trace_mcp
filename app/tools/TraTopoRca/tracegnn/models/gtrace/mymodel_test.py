@@ -40,6 +40,7 @@ def main():
     ap.add_argument('--dataset', default=None, help='Override dataset name (default from config)')
     ap.add_argument('--test-dataset', default=None, help='Override test split name (default from config)')
     ap.add_argument('--dataset-root', default=None, help='Override dataset root directory (default from config)')
+    ap.add_argument('--limit', type=int, default=None, help='Limit number of traces (debug mode)')
     args = ap.parse_args()
 
     # Build config via mltk experiment (to keep nested config behavior)

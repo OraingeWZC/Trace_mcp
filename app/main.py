@@ -176,6 +176,79 @@ def test_aiops_sv(
         
     return {"exit_code": result.exit_code, "log": result.log}
 
+# ================= Group 3: TraTopoRca (GTrace) =================
+
+@mcp.tool()
+def train_tratoporca(
+    dataset: str = "dataset_demo",
+    batch_size: int = 32,
+    max_epochs: int = 10,
+    device: str = "cuda",
+    seed: int = 1234,
+    model_path: str = "save/model_rerank.pth"
+) -> Dict[str, Any]:
+    """
+    [TraTopoRca] 训练工具：运行 tracegnn 图神经网络训练。
+    对应命令: python -m tracegnn.models.gtrace.mymodel_main
+    
+    Args:
+        dataset: 数据集名称 (默认: dataset_demo)
+        max_epochs: 训练轮数 (测试时建议设为 1)
+        model_path: 模型保存路径
+    """
+    extra_args = {
+        "dataset": dataset,
+        "batch_size": batch_size,
+        "max_epochs": max_epochs,
+        "device": device,
+        "seed": seed,
+        "model_path": model_path
+    }
+    # op="tratoporca", stage="train" -> 触发 handler 里的模块运行逻辑
+    req = ToolRequest(op="tratoporca", stage="train", extra_args=extra_args)
+    result = run_script(req)
+    
+    if result.exit_code != 0:
+        raise RuntimeError(f"TraTopoRca Training failed:\n{result.log}")
+    return {"exit_code": result.exit_code, "log": result.log}
+
+
+@mcp.tool()
+def test_tratoporca(
+    model: str = None,
+    dataset: str = None,
+    test_dataset: str = None,
+    batch_size: int = 32,
+    limit: int = None,
+    report_dir: str = "reports_mcp",
+    export_debug: bool = True
+) -> Dict[str, Any]:
+    """
+    [TraTopoRca] 评估工具：运行 mymodel_test.py 进行推理和根因分析。
+    对应命令: python -m tracegnn.models.gtrace.mymodel_test
+    
+    Args:
+        model: 模型路径 (.pth)，不填则使用 config 默认
+        dataset: 数据集名称
+        test_dataset: 测试子集 (如 'test' 或 'val')
+    """
+    extra_args = {
+        "model": model,
+        "dataset": dataset,
+        "test_dataset": test_dataset,
+        "batch_size": batch_size,
+        "limit": limit, # 传给 mymodel_test.py
+        "report_dir": report_dir,
+        "export_debug": export_debug
+    }
+    
+    req = ToolRequest(op="tratoporca", stage="test", extra_args=extra_args)
+    result = run_script(req)
+    
+    if result.exit_code != 0:
+        raise RuntimeError(f"TraTopoRca test failed:\n{result.log}")
+    return {"exit_code": result.exit_code, "log": result.log}
+
 if __name__ == "__main__":
     # mcp.run(transport="sse")
     mcp.run()

@@ -10,7 +10,7 @@ class ToolRequest(BaseModel):
     - stage: 调用哪个脚本，需包含 train / preprocess / test
     - extra_args: 会被转成命令行参数传给脚本
     """
-    op: Literal["aiops_svnd", "aiops_sv", 'check_svnd'] 
+    op: Literal["aiops_svnd", "aiops_sv", "tratoporca", 'check_svnd'] 
     stage: Literal["train", "preprocess", "test", 'debug'] = "train"
     extra_args: Dict[str, Any] = Field(default_factory=dict)
 

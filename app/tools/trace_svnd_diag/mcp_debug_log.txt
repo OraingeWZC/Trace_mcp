@@ -1,12 +1,12 @@
 === Starting Command ===
-['D:\\School\\Anaconda\\envs\\py310\\python.exe', '-u', 'E:\\ZJU\\AIOps\\Projects\\TraDNN\\Trace_mcp\\app\\tools\\trace_svnd_diag\\debug_check_svnd.py']
+['D:\\School\\Anaconda\\envs\\trace_mcp\\python.exe', '-u', 'E:\\ZJU\\AIOps\\Projects\\TraDNN\\Trace_mcp\\app\\tools\\trace_svnd_diag\\debug_check_svnd.py']
 
 Environment PATH prefix:
-D:\School\Anaconda\envs\py310\Library\bin;D:\School\Anaconda\envs\py310\Scripts;D:\School\Anaconda\envs\py310;E:\VMware\bin\;C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem;C:\Windows\System32\WindowsPowerShell\v1.0\;C:\Windows\System32\OpenSSH\;C:\Program Files (x86)\NVIDIA Corporation\Phys...
+D:\School\Anaconda\envs\trace_mcp\Library\bin;D:\School\Anaconda\envs\trace_mcp\Scripts;D:\School\Anaconda\envs\trace_mcp;E:\apps\vue\nodejsFiles\node_cache\_npx\5a9d879542beca3a\node_modules\.bin;E:\ZJU\AIOps\Projects\TraDNN\Trace_mcp\node_modules\.bin;E:\ZJU\AIOps\Projects\TraDNN\node_modules\.bin...
 
 === DEBUG PROBE START ===
-PID: 15836
-Python Executable: D:\School\Anaconda\envs\py310\python.exe
+PID: 25100
+Python Executable: D:\School\Anaconda\envs\trace_mcp\python.exe
 CWD: E:\ZJU\AIOps\Projects\TraDNN\Trace_mcp\app\tools\trace_svnd_diag
 
 [Env Check]

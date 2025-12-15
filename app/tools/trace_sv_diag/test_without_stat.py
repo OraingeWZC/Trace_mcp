@@ -1,5 +1,3 @@
-# test_aiops3c6c.py (v2: 含 Weighted 指标)
-# -*- coding: utf-8 -*-
 import os, json, argparse, csv
 import torch
 import torch.nn as nn
@@ -149,7 +147,7 @@ def evaluate_and_save_fine(model, loader, device, class_names, keep_types, out_d
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--data-root", default="dataset/aiops_sv", help="包含 test.jsonl 与 vocab.json 的目录")
-    ap.add_argument("--model-path", default="dataset/aiops_sv/1210/aiops_superfine_cls.pth", help="ckpt路径")
+    ap.add_argument("--model-path", default="dataset/aiops_sv/aiops_superfine_cls.pth", help="ckpt路径")
     ap.add_argument("--batch", type=int, default=64)
     ap.add_argument("--seed", type=int, default=2025)
     ap.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
@@ -161,34 +159,22 @@ def main():
     args = ap.parse_args()
     set_seed(args.seed)
 
-    # 1. 加载 Checkpoint (先加载，因为需要里面的 stats)
-    print(f"[Info] Loading model checkpoint from {args.model_path} ...")
-    checkpoint = torch.load(args.model_path, map_location=args.device)
-    
-    # 2. 解析 Checkpoint (兼容旧版和新版)
-    saved_stats = None
-    if isinstance(checkpoint, dict) and "model_state_dict" in checkpoint:
-        # === 新版格式 (推荐) ===
-        print("[Info] Detected NEW checkpoint format (with stats).")
-        state_dict = checkpoint["model_state_dict"]
-        saved_stats = checkpoint.get("stats")
-        # 如果ckpt里存了 args，也可以打印一下确认
-        # print("[Info] Training Args:", checkpoint.get("args"))
+    api_vocab, status_vocab, fine_names, superfine_names = vocab_sizes_from_meta(args.data_root)
+    if args.task == "superfine":
+        if superfine_names is None:
+            raise RuntimeError("vocab.json 中缺少 superfine_classes")
+        class_names = superfine_names
+        print(f"[Info] Task=superfine, num_classes={len(class_names)}")
     else:
-        # === 旧版格式 (仅权重) ===
-        print("[Warn] Detected OLD checkpoint format (weights only).")
-        state_dict = checkpoint
-        saved_stats = None
+        if fine_names is None:
+            raise RuntimeError("vocab.json 中缺少 fine_label_map")
+        class_names = fine_names
+        print(f"[Info] Task=fine, num_classes={len(class_names)}")
 
-    # 3. 准备数据集 (核心修改：使用保存的 stats)
     te_path = os.path.join(args.data_root, "test.jsonl")
-    if saved_stats is not None:
-        print("[Data] Using SAVED stats from checkpoint for normalization.")
-        ds_te = TraceDataset(te_path, task=args.task, fit_stats=False, stats=saved_stats)
-    else:
-        print("[Warn] No stats found in checkpoint. Re-fitting on test data (NOT RECOMMENDED for production).")
-        ds_te = TraceDataset(te_path, task=args.task, fit_stats=True)
+    ds_te = TraceDataset(te_path, task=args.task, fit_stats=True)
     
+    # === Limit logic ===
     if args.limit is not None and args.limit > 0:
         if len(ds_te.items) > args.limit:
             print(f"[Info] Limiting test dataset from {len(ds_te.items)} to {args.limit} samples.")
@@ -196,23 +182,7 @@ def main():
 
     te_loader = torch.utils.data.DataLoader(ds_te, batch_size=args.batch, shuffle=False, collate_fn=collate, num_workers=0)
 
-    # 4. 获取类别信息
-    api_vocab, status_vocab, fine_names, superfine_names = vocab_sizes_from_meta(args.data_root)
-    if args.task == "superfine":
-        if superfine_names is None: raise RuntimeError("vocab.json 中缺少 superfine_classes")
-        class_names = superfine_names
-    else:
-        if fine_names is None: raise RuntimeError("vocab.json 中缺少 fine_label_map")
-        class_names = fine_names
-
-    # 5. 初始化模型并加载权重
-    num_classes = len(class_names)
-    model = TraceClassifier(api_vocab, status_vocab, num_classes).to(args.device)
-    model.load_state_dict(state_dict, strict=True)
-
-    # 6. 确定保留类别 (Keep Types)
     label_key = "superfine_label" if args.task == "superfine" else "fine_label"
-    # 这里统计测试集的分布仅仅是为了 report 展示，不影响模型推理逻辑
     cnt = Counter(int(r[label_key]) for r in ds_te.items if r.get(label_key) is not None and int(r[label_key]) >= 0)
     keep_types = {k for k, v in cnt.items() if v >= args.min_type_support}
     if not keep_types:
@@ -220,7 +190,13 @@ def main():
         print("[Warn] No types met min_support, keeping ALL.")
     print(f"[{args.task}] min_support={args.min_type_support}, keep_types={sorted(keep_types)}")
 
-    # 7. 开始评估
+    num_classes = len(class_names)
+    model = TraceClassifier(api_vocab, status_vocab, num_classes).to(args.device)
+    
+    print(f"[Info] Loading model from {args.model_path} ...")
+    state = torch.load(args.model_path, map_location=args.device)
+    model.load_state_dict(state, strict=True)
+
     out_dir = os.path.join(args.data_root, "runs", args.run_name, f"{args.task}_test")
     evaluate_and_save_fine(model, te_loader, args.device, class_names, keep_types, out_dir)
 

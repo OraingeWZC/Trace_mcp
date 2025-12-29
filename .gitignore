@@ -16,3 +16,4 @@ app/tools/TraTopoRca/tracegnn/models/gtrace/__pycache__/*
 app/tools/TraTopoRca/tracegnn/models/gtrace/models/__pycache__/*
 app/tools/TraTopoRca/tracegnn/utils/__pycache__/*
 app/tools/TraTopoRca/tracegnn/utils/hostutils/__pycache__/*
+app/tools/TraTopoRca/score_distribution_debug.csv

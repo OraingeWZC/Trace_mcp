@@ -182,7 +182,19 @@ def main():
 
     # 4. 加载模型权重
     model = TraceClassifier(api_sz, st_sz, node_sz, n_types=len(type_names), ctx_dim=ctx_dim).to(device)
-    model.load_state_dict(ckpt["state_dict"])
+    
+    # 【核心修改】处理 state_dict 键名不匹配问题 (hgc -> h_host)
+    state_dict = ckpt["state_dict"]
+    new_state_dict = {}
+    for k, v in state_dict.items():
+        if k.startswith("hgc"):
+            # 将旧的 hgc1/2 映射到新的 h_host1/2
+            new_k = k.replace("hgc", "h_host")
+            new_state_dict[new_k] = v
+        else:
+            new_state_dict[k] = v
+    
+    model.load_state_dict(new_state_dict)
     
     # 5. 运行评测
     print(f"\n[Eval] Running on {args.limit if args.limit else 'ALL'} samples ...")

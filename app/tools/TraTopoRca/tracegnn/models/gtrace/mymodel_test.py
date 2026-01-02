@@ -1,6 +1,7 @@
 import os
 import argparse
 import warnings
+import sys
 
 import dgl
 import torch
@@ -42,6 +43,7 @@ def main():
     ap.add_argument('--dataset-root', default=None, help='Override dataset root directory (default from config)')
     ap.add_argument('--limit', type=int, default=None, help='Limit number of traces (debug mode)')
     args = ap.parse_args()
+    sys.argv = [sys.argv[0]]
 
     # Build config via mltk experiment (to keep nested config behavior)
     with mltk.Experiment(ExpConfig) as exp:

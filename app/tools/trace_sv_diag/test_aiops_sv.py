@@ -137,6 +137,8 @@ def evaluate_and_save_fine(model, loader, device, class_names, keep_types, out_d
     print(" class                 TP     Support   Pred       Precision   Recall      F1")
     for row in rows:
         nm, tp, sup, pred, p, r, f = row
+        if sup == 0:
+            continue
         print(f" {nm[:20]:<20}{tp:>6d}   {sup:>8d}   {pred:>6d}     {p:>9.4f}  {r:>8.4f}  {f:>8.4f}")
     
     print("-" * 75)

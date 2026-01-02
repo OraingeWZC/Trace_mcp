@@ -1,5 +1,5 @@
 # Trace_mcp/app/main.py
-from typing import Any, Dict, Annotated
+from typing import Any, Dict, Annotated, Optional
 from mcp.server.fastmcp import FastMCP
 from app.schemas import ToolRequest
 from app.handler import run_script
@@ -69,7 +69,7 @@ def test_aiops_svnd(
     batch_size: Annotated[int, Field(description="批大小 (Batch Size)")] = 128,
     seed: Annotated[int, Field(description="随机种子")] = 2025,
     device: Annotated[str, Field(description="运行设备 ('cuda' 或 'cpu')")] = "cuda",
-    limit: Annotated[int, Field(description="测试样本数量限制 (强烈建议设置以避免超时，如 50)")] = None
+    limit: Annotated[int, Field(description="测试样本数量限制 (强烈建议设置以避免超时，如 50)")] = 50
 ) -> Dict[str, Any]:
     """
     [Trace拓扑融合] 模型测试：融合 Trace 调用链与物理部署拓扑信息。
@@ -138,7 +138,7 @@ def test_aiops_sv(
     device: str = "cuda",
     min_type_support: int = 150,
     run_name: str = "trace_only",
-    limit: int = None
+    limit: int = 100
 ) -> Dict[str, Any]:
     """
     [单Trace] 模型测试：仅基于 Trace 调用链结构进行故障分类评估。
@@ -179,7 +179,7 @@ def test_aiops_sv(
 # ================= Group 3: TraTopoRca (GTrace) =================
 
 @mcp.tool()
-def train_tratoporca(
+def train_tracerca(
     dataset: str = "dataset_demo",
     batch_size: int = 32,
     max_epochs: int = 10,
@@ -188,7 +188,7 @@ def train_tratoporca(
     model_path: str = "save/model_rerank.pth"
 ) -> Dict[str, Any]:
     """
-    [TraTopoRca] 训练工具：运行 tracegnn 图神经网络训练。
+    [TraceRca] 训练工具：运行 tracegnn 图神经网络训练。
     对应命令: python -m tracegnn.models.gtrace.mymodel_main
     
     Args:
@@ -214,32 +214,33 @@ def train_tratoporca(
 
 
 @mcp.tool()
-def test_tratoporca(
-    model: str = None,
-    dataset: str = None,
-    test_dataset: str = None,
-    batch_size: int = 32,
-    limit: int = None,
-    report_dir: str = "reports_mcp",
-    export_debug: bool = True
+def test_tracerca(
+    model: Optional[str] = None,
+    test_dataset: Optional[str] = None,
+    limit: Optional[str] = None,
+    report_dir: str = "reports_mcp"
 ) -> Dict[str, Any]:
     """
-    [TraTopoRca] 评估工具：运行 mymodel_test.py 进行推理和根因分析。
-    对应命令: python -m tracegnn.models.gtrace.mymodel_test
+    [TraceRca] 评估工具：运行 mymodel_test.py 进行推理和根因分析。
     
     Args:
         model: 模型路径 (.pth)，不填则使用 config 默认
-        dataset: 数据集名称
-        test_dataset: 测试子集 (如 'test' 或 'val')
+        test_dataset: 测试子集
+        limit: 限制测试数量 (例如 10)，用于快速验证
+        report_dir: 报告输出目录
     """
+    # 在这里定义那些不需要用户输入的“隐藏参数”
     extra_args = {
+        # === 用户输入的参数 ===
         "model": model,
-        "dataset": dataset,
         "test_dataset": test_dataset,
-        "batch_size": batch_size,
-        "limit": limit, # 传给 mymodel_test.py
+        "limit": limit,
         "report_dir": report_dir,
-        "export_debug": export_debug
+        
+        # === 隐藏的固定参数 (写死在这里) ===
+        "batch_size": 32,      # 默认批次大小
+        "export_debug": True,  # 默认开启调试输出
+        # "dataset": "dataset_demo"  # 如果你想硬编码数据集，可以把这行解开
     }
     
     req = ToolRequest(op="tratoporca", stage="test", extra_args=extra_args)

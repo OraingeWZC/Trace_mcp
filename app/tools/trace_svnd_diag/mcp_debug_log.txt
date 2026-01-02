@@ -1,21 +1,11 @@
 === Starting Command ===
-['D:\\School\\Anaconda\\envs\\trace_mcp\\python.exe', '-u', 'E:\\ZJU\\AIOps\\Projects\\TraDNN\\Trace_mcp\\app\\tools\\trace_svnd_diag\\debug_check_svnd.py']
+/root/miniconda3/envs/py310/bin/python -u /root/wzc/Trace_mcp/app/tools/trace_svnd_diag/test_aiops_svnd.py --model-path dataset/aiops_svnd/1019/aiops_nodectx_multihead.pt --data-root dataset/aiops_svnd --batch-size 128 --seed 2025 --device cuda --limit 50
 
-Environment PATH prefix:
-D:\School\Anaconda\envs\trace_mcp\Library\bin;D:\School\Anaconda\envs\trace_mcp\Scripts;D:\School\Anaconda\envs\trace_mcp;E:\apps\vue\nodejsFiles\node_cache\_npx\5a9d879542beca3a\node_modules\.bin;E:\ZJU\AIOps\Projects\TraDNN\Trace_mcp\node_modules\.bin;E:\ZJU\AIOps\Projects\TraDNN\node_modules\.bin...
+WorkDir: /root/wzc/Trace_mcp/app/tools/trace_svnd_diag
 
-=== DEBUG PROBE START ===
-PID: 25100
-Python Executable: D:\School\Anaconda\envs\trace_mcp\python.exe
-CWD: E:\ZJU\AIOps\Projects\TraDNN\Trace_mcp\app\tools\trace_svnd_diag
-
-[Env Check]
-SUCCESS: 'Library\bin' found in PATH.
-
-[Import Check]
--> Importing numpy... OK
--> Importing torch (Critical)... OK
-   Torch Version: 2.3.0+cpu
-   CUDA Available: False
-
-=== DEBUG PROBE FINISHED ===
+usage: AIOps Trace Multi-Head Test [-h] [--data_root DATA_ROOT] [--ckpt CKPT]
+                                   [--split {train,val,test}]
+                                   [--batch_size BATCH_SIZE] [--device DEVICE]
+                                   [--seed SEED] [--host_conv {gcn,gat}]
+                                   [--limit LIMIT]
+AIOps Trace Multi-Head Test: error: unrecognized arguments: --model-path dataset/aiops_svnd/1019/aiops_nodectx_multihead.pt --data-root dataset/aiops_svnd --batch-size 128

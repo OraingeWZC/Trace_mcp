@@ -89,6 +89,7 @@ def convert_csv_to_db(csv_file: str, output_dir: str, min_node_count: int = 2, m
     if trace_graphs is None:
         trace_graphs = []
     print(f"成功转换 {len(trace_graphs)} 个图")
+    precompute_host_states(trace_graphs, output_dir, id_manager)
 
     # 创建数据库（直接传完整路径）
     db_path = os.path.join(output_dir, "_bytes.db")
@@ -193,6 +194,8 @@ def split_and_convert_csv(csv_file: str, output_root: str,
         if trace_graphs is None:
             trace_graphs = []
         print(f"{name}数据集成功转换 {len(trace_graphs)} 个图")
+
+        precompute_host_states(trace_graphs, output_dir, id_manager)
         
         if len(trace_graphs) > 0:
             # 创建数据库（直接传完整路径）

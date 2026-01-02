@@ -20,16 +20,34 @@ DISK_METRICS = [
 
 
 def _find_infra_path(processed_dir: str) -> Optional[str]:
-    p0 = os.path.join(processed_dir, INFRA_FILE_NAME)
-    if os.path.isfile(p0):
-        return p0
-    p1 = os.path.join(processed_dir, 'infra', INFRA_FILE_NAME)
-    if os.path.isfile(p1):
-        return p1
-    root = os.path.dirname(processed_dir.rstrip(os.sep))
-    p2 = os.path.join(root, 'infra', INFRA_FILE_NAME)
-    if os.path.isfile(p2):
-        return p2
+    """
+    Locate merged_all_infra.csv with recursive parent directory search.
+    覆盖范围：当前目录 -> processed -> dataset_name -> dataset (TraTopoRca/dataset)
+    """
+    # 1. 优先检查当前传入目录及其 infra 子目录
+    candidates = [
+        os.path.join(processed_dir, INFRA_FILE_NAME),
+        os.path.join(processed_dir, 'infra', INFRA_FILE_NAME),
+    ]
+    
+    # 2. 向上递归查找父目录 (最多找 5 层)
+    curr = processed_dir
+    for _ in range(5):
+        curr = os.path.dirname(curr)
+        if not curr or curr == os.path.sep:
+            break
+        candidates.append(os.path.join(curr, INFRA_FILE_NAME))
+        candidates.append(os.path.join(curr, 'infra', INFRA_FILE_NAME))
+
+    # 3. 额外保险：检查当前运行脚本所在目录下的 dataset 文件夹
+    candidates.append(os.path.join(os.getcwd(), 'dataset', INFRA_FILE_NAME))
+    candidates.append(os.path.join(os.getcwd(), INFRA_FILE_NAME))
+
+    # 执行检查并返回第一个存在的路径
+    for path in candidates:
+        if os.path.isfile(path):
+            return path
+            
     return None
 
 

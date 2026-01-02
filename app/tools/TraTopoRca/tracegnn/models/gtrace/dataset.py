@@ -105,52 +105,75 @@ class TrainDataset(DGLDataset):
         if getattr(self.config.HostState, 'enable', False):
             try:
                 host_ids = dgl_graph.ndata['host_id'].detach().cpu().numpy()
-                # 优先使用 root span 的 StartTime 作为 t0（更贴近“根因起点”）
-                try:
-                    st = graph.root.spans[0].start_time if (graph.root and graph.root.spans) else None
-                    if isinstance(st, (int, float)):
-                        v = float(st)
-                        t0_ms = int(v if v > 1e12 else v * 1000.0)
-                    elif hasattr(st, 'timestamp'):
-                        t0_ms = int(st.timestamp() * 1000.0)
+                
+                # === 1. 尝试使用预计算数据 ===
+                precomputed_map = graph.data.get('precomputed_host_state', None)
+                
+                if precomputed_map is not None:
+                    # 获取维度 (尝试从第一个向量获取，或者根据配置计算)
+                    if len(precomputed_map) > 0:
+                        in_dim = next(iter(precomputed_map.values())).shape[0]
                     else:
-                        # fallback use node min start_time (seconds) from DGL, convert to ms
+                        # 兜底维度计算
+                        metrics = list(getattr(self.config.HostState, 'metrics', DEFAULT_METRICS))
+                        if getattr(self.config.HostState, 'include_disk', False):
+                             for m in DISK_METRICS:
+                                 if m not in metrics: metrics.append(m)
+                        per_dims = int(getattr(self.config.HostState, 'per_metric_dims', 3))
+                        in_dim = len(metrics) * per_dims
+
+                    hs = np.zeros((host_ids.shape[0], in_dim), dtype=np.float32)
+                    for i, hid in enumerate(host_ids):
+                        hid_int = int(hid)
+                        if hid_int in precomputed_map:
+                            hs[i, :] = precomputed_map[hid_int]
+                    
+                    dgl_graph.ndata['host_state'] = torch.from_numpy(hs).to(dgl_graph.ndata['latency'].device)
+                
+                # === 2. 如果没有预计算数据，回退到实时计算 (原始逻辑) ===
+                else:
+                    # 优先使用 root span 的 StartTime
+                    try:
+                        st = graph.root.spans[0].start_time if (graph.root and graph.root.spans) else None
+                        if isinstance(st, (int, float)):
+                            v = float(st)
+                            t0_ms = int(v if v > 1e12 else v * 1000.0)
+                        elif hasattr(st, 'timestamp'):
+                            t0_ms = int(st.timestamp() * 1000.0)
+                        else:
+                            v = float(dgl_graph.ndata['start_time'].min().item())
+                            t0_ms = int(v * 1000.0)
+                    except Exception:
                         v = float(dgl_graph.ndata['start_time'].min().item())
                         t0_ms = int(v * 1000.0)
-                except Exception:
-                    v = float(dgl_graph.ndata['start_time'].min().item())
-                    t0_ms = int(v * 1000.0)
-                t0_min_ms = (t0_ms // 60000) * 60000
-                # metrics list
-                metrics = list(getattr(self.config.HostState, 'metrics', DEFAULT_METRICS))
-                if getattr(self.config.HostState, 'include_disk', False):
-                    for m in DISK_METRICS:
-                        if m not in metrics:
-                            metrics.append(m)
-                per_dims = int(getattr(self.config.HostState, 'per_metric_dims', 3))
-                in_dim = len(metrics) * per_dims
-                # compute per unique host
-                hid_to_vec: Dict[int, np.ndarray] = {}
-                for hid in set(map(int, host_ids.tolist())):
-                    if hid <= 0:
-                        continue
-                    try:
-                        hname = self.id_manager.host_id.rev(int(hid))
-                    except Exception:
-                        hname = None
-                    vec = host_state_vector(hname, self.infra_index, t0_min_ms, metrics=metrics, W=int(self.config.HostState.W), per_metric_dims=per_dims) if hname else None
-                    if vec is None:
-                        vec = np.zeros((in_dim,), dtype=np.float32)
-                    hid_to_vec[int(hid)] = vec
-                # map to nodes
-                hs = np.zeros((host_ids.shape[0], in_dim), dtype=np.float32)
-                for i, hid in enumerate(host_ids):
-                    vec = hid_to_vec.get(int(hid), None)
-                    if vec is None:
-                        # unknown/zero host
-                        continue
-                    hs[i, :] = vec
-                dgl_graph.ndata['host_state'] = torch.from_numpy(hs).to(dgl_graph.ndata['latency'].device)
+                    t0_min_ms = (t0_ms // 60000) * 60000
+                    
+                    metrics = list(getattr(self.config.HostState, 'metrics', DEFAULT_METRICS))
+                    if getattr(self.config.HostState, 'include_disk', False):
+                        for m in DISK_METRICS:
+                            if m not in metrics:
+                                metrics.append(m)
+                    per_dims = int(getattr(self.config.HostState, 'per_metric_dims', 3))
+                    in_dim = len(metrics) * per_dims
+                    
+                    hid_to_vec: Dict[int, np.ndarray] = {}
+                    for hid in set(map(int, host_ids.tolist())):
+                        if hid <= 0: continue
+                        try:
+                            hname = self.id_manager.host_id.rev(int(hid))
+                        except Exception:
+                            hname = None
+                        vec = host_state_vector(hname, self.infra_index, t0_min_ms, metrics=metrics, W=int(self.config.HostState.W), per_metric_dims=per_dims) if hname else None
+                        if vec is None:
+                            vec = np.zeros((in_dim,), dtype=np.float32)
+                        hid_to_vec[int(hid)] = vec
+                        
+                    hs = np.zeros((host_ids.shape[0], in_dim), dtype=np.float32)
+                    for i, hid in enumerate(host_ids):
+                        vec = hid_to_vec.get(int(hid), None)
+                        if vec is None: continue
+                        hs[i, :] = vec
+                    dgl_graph.ndata['host_state'] = torch.from_numpy(hs).to(dgl_graph.ndata['latency'].device)
             except Exception:
                 pass
 

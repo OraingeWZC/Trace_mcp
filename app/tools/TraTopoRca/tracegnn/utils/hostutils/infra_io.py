@@ -21,16 +21,29 @@ def _find_infra_path(processed_dir: str) -> Optional[str]:
       2) <processed_dir>/infra/merged_all_infra.csv
       3) <dataset_root>/infra/merged_all_infra.csv (one-level up if processed)
     """
-    p0 = os.path.join(processed_dir, INFRA_FILE_NAME)
-    if os.path.isfile(p0):
-        return p0
-    p1 = os.path.join(processed_dir, 'infra', INFRA_FILE_NAME)
-    if os.path.isfile(p1):
-        return p1
-    root = os.path.dirname(processed_dir.rstrip(os.sep))
-    p2 = os.path.join(root, 'infra', INFRA_FILE_NAME)
-    if os.path.isfile(p2):
-        return p2
+# 1. 优先检查当前传入目录及其 infra 子目录
+    candidates = [
+        os.path.join(processed_dir, INFRA_FILE_NAME),
+        os.path.join(processed_dir, 'infra', INFRA_FILE_NAME),
+    ]
+    
+    # 2. 向上递归查找父目录
+    curr = processed_dir
+    for _ in range(5):
+        curr = os.path.dirname(curr)
+        if not curr or curr == os.path.sep:
+            break
+        candidates.append(os.path.join(curr, INFRA_FILE_NAME))
+        candidates.append(os.path.join(curr, 'infra', INFRA_FILE_NAME))
+
+    # 3. 额外保险
+    candidates.append(os.path.join(os.getcwd(), 'dataset', INFRA_FILE_NAME))
+    candidates.append(os.path.join(os.getcwd(), INFRA_FILE_NAME))
+
+    for path in candidates:
+        if os.path.isfile(path):
+            return path
+            
     return None
 
 

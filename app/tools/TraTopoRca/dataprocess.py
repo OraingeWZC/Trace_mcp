@@ -8,6 +8,51 @@ from tracegnn.data.trace_graph import load_trace_csv, df_to_trace_graphs, TraceG
 from tracegnn.data.trace_graph_db import TraceGraphDB, BytesSqliteDB
 import pandas as pd
 
+def precompute_host_states(trace_graphs, output_dir, id_manager, W=3):
+    """在数据处理阶段预先计算 Host State 向量并存储在 graph.data 中"""
+    print(f"正在尝试加载基础设施指标数据 (Output Dir: {output_dir})...")
+    infra_index = load_host_infra_index(output_dir)
+    
+    if infra_index is None:
+        print(f"警告: 未找到基础设施指标数据，跳过 SInfra 预计算。")
+        return
+
+    metrics = list(DEFAULT_METRICS)
+    # for m in DISK_METRICS: # 如需开启磁盘指标请取消注释
+    #     if m not in metrics: metrics.append(m)
+    per_metric_dims = 3 
+
+    success_count = 0
+    for graph in tqdm(trace_graphs, desc="Pre-computing HostStates"):
+        try:
+            st = graph.root.spans[0].start_time if (graph.root and graph.root.spans) else None
+            if isinstance(st, (int, float)):
+                v = float(st)
+                t0_ms = int(v if v > 1e12 else v * 1000.0)
+            elif hasattr(st, 'timestamp'):
+                t0_ms = int(st.timestamp() * 1000.0)
+            else:
+                t0_ms = 0
+            t0_min_ms = (t0_ms // 60000) * 60000
+        except:
+            continue
+
+        host_ids = set(node.host_id for _, node in graph.iter_bfs() if node.host_id and node.host_id > 0)
+        host_state_map = {}
+        for hid in host_ids:
+            try:
+                hname = id_manager.host_id.rev(int(hid))
+                if hname:
+                    vec = host_state_vector(hname, infra_index, t0_min_ms, metrics=metrics, W=W, per_metric_dims=per_metric_dims)
+                    if vec is not None:
+                        host_state_map[hid] = vec
+            except:
+                pass
+        
+        if host_state_map:
+            graph.data['precomputed_host_state'] = host_state_map
+            success_count += 1
+    print(f"完成 SInfra 预计算: {success_count}/{len(trace_graphs)} 个 Trace 成功关联指标数据")
 
 def convert_csv_to_db(csv_file: str, output_dir: str, min_node_count: int = 2, max_node_count: int = 100):
     """

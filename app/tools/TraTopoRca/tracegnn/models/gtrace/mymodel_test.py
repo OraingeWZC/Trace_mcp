@@ -16,6 +16,8 @@ from tracegnn.models.gtrace.config import ExpConfig
 from tracegnn.models.gtrace.dataset import TestDataset
 from tracegnn.models.gtrace.models.mymodel import MyTraceAnomalyModel
 from tracegnn.models.gtrace.mymodel_eval import evaluate
+from tracegnn.data.trace_graph import TraceGraphIDManager
+from tracegnn.utils.trace_host_fusion import load_host_topology, load_host_infra_index
 
 
 def init_seed(config: ExpConfig):
@@ -58,6 +60,8 @@ def main():
             config.dataset_root_dir = args.dataset_root
         if args.batch_size is not None:
             config.test_batch_size = int(args.batch_size)
+        if args.limit is not None:
+            config.max_eval_traces = args.limit
         # Optional explicit model path override
         if args.model is not None:
             try:
@@ -102,8 +106,28 @@ def main():
             model.load_state_dict(state)
             logger.info(f"Loaded checkpoint from {ckpt_path}")
 
-        # Run evaluation (epoch=None indicates final eval)
-        evaluate(config, test_loader, model, epoch=None)
+        # 在 "Run evaluation" 之前，手动加载一次数据
+        logger.info("Pre-loading auxiliary data (IDManager, Topology, InfraIndex)...")
+        processed_dir = os.path.join(config.dataset_root_dir, config.dataset, 'processed')
+        
+        # ✅ 1. 加载 ID Manager
+        id_manager_obj = TraceGraphIDManager(processed_dir)
+        
+        # ✅ 2. 加载 Topology
+        host_adj_obj = load_host_topology(processed_dir, id_manager_obj)
+        
+        # ✅ 3. 加载 Infra Index (只需加载这一次！)
+        infra_index_obj = load_host_infra_index(processed_dir)
+
+        # Run evaluation
+        evaluate(config, 
+                test_loader, 
+                model, 
+                # ✅ 把上面加载好的对象传进去
+                id_manager=id_manager_obj,
+                host_adj=host_adj_obj,
+                infra_index=infra_index_obj
+        )
 
 
 if __name__ == '__main__':

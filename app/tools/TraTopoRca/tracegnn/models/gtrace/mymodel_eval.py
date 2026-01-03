@@ -22,7 +22,14 @@ from tracegnn.utils.analyze_nll import analyze_anomaly_scores
 
 
 @torch.no_grad()
-def evaluate(config: ExpConfig, dataloader: dgl.dataloading.GraphDataLoader, model: MyTraceAnomalyModel, epoch: Optional[int] = None):
+def evaluate(config: ExpConfig, 
+             dataloader: dgl.dataloading.GraphDataLoader, 
+             model: MyTraceAnomalyModel, 
+             epoch: Optional[int] = None,
+             # ✅ 新增下面这三个参数，默认值为 None
+             id_manager=None,
+             host_adj=None,
+             infra_index=None):
     """
     Evaluate MyTraceAnomalyModel (基于 total_loss / structure_loss / latency_loss)
     同时进行根因定位分析
@@ -50,7 +57,10 @@ def evaluate(config: ExpConfig, dataloader: dgl.dataloading.GraphDataLoader, mod
         import os
         from datetime import datetime
         processed_dir = os.path.join(config.dataset_root_dir, config.dataset, 'processed')
-        id_manager = TraceGraphIDManager(processed_dir)
+        # ✅ 修改点 1：如果外部没传 id_manager，才自己加载
+        if id_manager is None:
+            id_manager = TraceGraphIDManager(processed_dir)
+
         # fault_category id -> name
         fc_name_map: Dict[int, str] = {}
         try:
@@ -62,8 +72,13 @@ def evaluate(config: ExpConfig, dataloader: dgl.dataloading.GraphDataLoader, mod
         except Exception:
             pass
         # load host topology and infra index (optional)
-        host_adj = load_host_topology(processed_dir, id_manager)
-        infra_index = load_host_infra_index(processed_dir)
+        # ✅ 修改点 2：如果外部没传 host_adj，才自己加载
+        if host_adj is None:
+            host_adj = load_host_topology(processed_dir, id_manager)
+        
+        # ✅ 修改点 3：如果外部没传 infra_index，才自己加载 (这就是你最耗时的那个)
+        if infra_index is None:
+            infra_index = load_host_infra_index(processed_dir)
         try:
             debug_flag = bool(getattr(config.RCA, 'export_debug', False))
         except Exception:

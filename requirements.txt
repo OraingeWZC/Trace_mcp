@@ -5,6 +5,7 @@ pydantic>=2.4.0
 # 核心工具库
 packaging>=23.0
 PyYAML>=6.0
+python-snappy==0.7.3
 
 # 数据科学基础库
 numpy==1.23.5

@@ -10,6 +10,7 @@
 """
 
 import os
+import sys
 import json
 import csv
 import time
@@ -23,7 +24,11 @@ from alibabacloud_sts20150401 import models as sts_models
 from alibabacloud_tea_openapi import models as open_api_models
 from Tea.exceptions import TeaException
 
-import app.dataset.tianchi.config as config
+import config
+
+# 添加项目路径
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, project_root)
 
 # ================= 🔧 配置区域 =================
 # 1. SLS 配置
@@ -227,7 +232,7 @@ class TraceExtractor:
                         'SpanId': data.get('spanId', ''),
                         'ParentID': data.get('parentSpanId', ''),
                         'ServiceName': data.get('serviceName', ''),
-                        'NodeName': res_obj.get('host.id') or res_obj.get('k8s.node.name', ''),
+                        'NodeName': res_obj.get('k8s.node.name', ''),
                         'PodName': res_obj.get('k8s.pod.name', ''),
                         'URL': data.get('spanName', ''),
                         'SpanKind': data.get('kind', ''),

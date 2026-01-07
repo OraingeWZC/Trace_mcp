@@ -374,10 +374,14 @@ def build_records(df: pd.DataFrame, cols, api_vocab, status_vocab, node_vocab,
 
 def parse_args():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--normal", default="E:\ZJU\AIOps\Projects\TraDNN\TraDiag/trace_svnd_all\dataset\Data/Normal.csv")
-    ap.add_argument("--service", default="E:\ZJU\AIOps\Projects\TraDNN\dataset\SplitTrace\service\merged.csv")
-    ap.add_argument("--node", default="E:/ZJU/AIOps/Projects/TraDNN/dataset/SplitTrace/node/merged.csv")
-    ap.add_argument("--outdir", default="dataset/aiops_svnd")
+    ap.add_argument("--normal", default="/root/wzc/Trace_mcp/app/dataset/tianchi/data/NormalData/normal_traces_mapped.csv")
+    ap.add_argument("--service", default="/root/wzc/Trace_mcp/app/dataset/tianchi/data/ServiceFault/all_fault_traces_mapped.csv")
+    ap.add_argument("--node", default="/root/wzc/Trace_mcp/app/dataset/tianchi/data/NodeFault/all_fault_traces_mapped.csv")
+    ap.add_argument("--outdir", default="dataset/tianchi")
+    # ap.add_argument("--normal", default="E:\ZJU\AIOps\Projects\TraDNN\TraDiag/trace_svnd_all\dataset\Data/Normal.csv")
+    # ap.add_argument("--service", default="E:\ZJU\AIOps\Projects\TraDNN\dataset\SplitTrace\service\merged.csv")
+    # ap.add_argument("--node", default="E:/ZJU/AIOps/Projects/TraDNN/dataset/SplitTrace/node/merged.csv")
+    # ap.add_argument("--outdir", default="dataset/aiops_svnd")
     ap.add_argument("--win-minutes", type=float, default=3.0)
     ap.add_argument("--approx-peak", type=int, default=1, help="1=窗口大小近似并发峰值(快), 0=瞬时并发近似")
     ap.add_argument("--train-ratio", type=float, default=0.8)

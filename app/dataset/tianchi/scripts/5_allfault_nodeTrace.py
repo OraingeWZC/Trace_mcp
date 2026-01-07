@@ -19,7 +19,11 @@ import logging
 from collections import defaultdict
 from datetime import datetime, timedelta
 
-import app.dataset.tianchi.config as config
+import config
+
+# 添加项目路径
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, project_root)
 
 # ================= 🔧 鉴权配置 =================
 os.environ["ALIBABA_CLOUD_ROLE_SESSION_NAME"] = "node-fault-verifier"
@@ -183,7 +187,7 @@ class TraceExtractor:
                     res_obj = safe_json_load(d.get('resources', '{}'))
                     attr_obj = safe_json_load(d.get('attributes', '{}'))
                     
-                    node_name = res_obj.get('host.id') or res_obj.get('k8s.node.name', '')
+                    node_name = res_obj.get('k8s.node.name', '')
                     
                     try:
                         s_ms = int(d.get('startTime', 0)) / 1e6

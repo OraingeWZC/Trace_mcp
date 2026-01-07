@@ -11,7 +11,11 @@ from datetime import datetime
 import pandas as pd  # 核心：引入 pandas 进行数据聚合
 import numpy as np
 
-import app.dataset.tianchi.config as config
+import config
+
+# 添加项目路径
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, project_root)
 
 # ================= 🔧 1. 在这里定义你需要的“精准指标列表” =================
 TARGET_METRICS = [

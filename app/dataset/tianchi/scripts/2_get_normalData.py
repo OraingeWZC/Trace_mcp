@@ -21,7 +21,7 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 
-import config
+import app.dataset.tianchi.config as config
 
 # ================= 🔧 配置区域 =================
 # 1. 指标定义

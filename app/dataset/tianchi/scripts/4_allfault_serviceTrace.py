@@ -23,7 +23,7 @@ from alibabacloud_sts20150401 import models as sts_models
 from alibabacloud_tea_openapi import models as open_api_models
 from Tea.exceptions import TeaException
 
-import config
+import app.dataset.tianchi.config as config
 
 # ================= 🔧 配置区域 =================
 # 1. SLS 配置

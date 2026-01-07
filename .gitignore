@@ -20,6 +20,7 @@ app/tools/TraTopoRca/score_distribution_debug.csv
 
 app/dataset/tianchi/.env
 app/dataset/tianchi/data/*
+app/dataset/tianchi/scripts/__pycache__/*
 app/dataset/tianchi/src/__pycache__/*
 app/dataset/tianchi/src/agents/__pycache__/*
 app/dataset/tianchi/src/utils/__pycache__/*

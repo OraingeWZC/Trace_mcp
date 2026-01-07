@@ -16,7 +16,7 @@ from alibabacloud_sts20150401 import models as sts_models
 from alibabacloud_tea_openapi import models as open_api_models
 from Tea.exceptions import TeaException
 
-import config
+import app.dataset.tianchi.config as config
 
 # ================= 🔧 基础配置 =================
 PROJECT_NAME = config.SLS_PROJECT_NAME

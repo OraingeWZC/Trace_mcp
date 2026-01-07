@@ -13,7 +13,7 @@ import sys
 import json
 import time
 from datetime import datetime
-import config
+import app.dataset.tianchi.config as config
 
 # ================= 🔧 鉴权配置 (完全复用您的原脚本) =================
 os.environ["ALIBABA_CLOUD_ROLE_SESSION_NAME"] = "my-sls-access"

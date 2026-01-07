@@ -15,7 +15,7 @@ from typing import List, Dict, Any, Optional
 import logging
 from pathlib import Path
 
-import config
+import app.dataset.tianchi.config as config
 
 # 添加项目路径
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

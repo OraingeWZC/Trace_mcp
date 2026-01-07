@@ -19,7 +19,7 @@ import logging
 from collections import defaultdict
 from datetime import datetime, timedelta
 
-import config
+import app.dataset.tianchi.config as config
 
 # ================= 🔧 鉴权配置 =================
 os.environ["ALIBABA_CLOUD_ROLE_SESSION_NAME"] = "node-fault-verifier"

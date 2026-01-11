@@ -22,8 +22,8 @@ def main():
     ap = argparse.ArgumentParser("SV Scheme B Training (No Host Graph)")
     # [差异点] 数据路径默认指向 Scheme B
     ap.add_argument("--data-root", default="dataset/tianchi/processed_0111")
-    ap.add_argument("--save-dir",  default="dataset/tianchi/processed_0111/0111")
-    ap.add_argument("--save_pt",   default="dataset/tianchi/processed_0111/0111/model.pt")
+    ap.add_argument("--save-dir",  default="dataset/tianchi/processed_0111/f1earlystop")
+    ap.add_argument("--save_pt",   default="dataset/tianchi/processed_0111/f1earlystop/model.pt")
     
     # 保持 SVND 参数
     ap.add_argument("--type_min_support", type=int, default=10, help="SV 数据量较小，建议调低阈值")
@@ -115,12 +115,14 @@ def main():
         vaL = run_epoch(va_loader, train=False)
         print(f"[Epoch {ep:02d}] train {trL:.4f} | val {vaL:.4f}")
 
-        evaluate_detailed(model, va_loader, device, type_names, keep_types=keep_types)
+        metrics = evaluate_detailed(model, va_loader, device, type_names, keep_types=keep_types)
+        current_f1 = metrics["type_f1"]  # 使用 Type F1 作为指标
 
-        if vaL < best - args.early_stop_min_delta:
-            best = vaL
+        if current_f1 > best + args.early_stop_min_delta:  # 如果 F1 提升了
+            best = current_f1
             best_state = {k: v.detach().cpu() for k, v in model.state_dict().items()}
             no_improve = 0
+            print(f"✨ New Best F1: {best:.4f}")
         else:
             no_improve += 1
             if args.early_stop_patience > 0 and no_improve >= args.early_stop_patience:

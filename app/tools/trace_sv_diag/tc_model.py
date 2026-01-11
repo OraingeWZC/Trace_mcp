@@ -131,9 +131,17 @@ class TraceClassifier(nn.Module):
 
         # --- 1. Call Graph (GCN) ---
         src, dst = g.edges()
-        N = g.num_nodes()
-        # 构建双向+自环图
-        g_call = dgl.add_self_loop(dgl.to_bidirected(g, copy_ndata=False))
+        # 确保索引是 long 类型且在 device 上
+        src = src.long()
+        dst = dst.long()
+        
+        # 拼接 原边 + 反向边
+        bi_src = torch.cat([src, dst])
+        bi_dst = torch.cat([dst, src])
+        
+        # 在当前 device 上直接创建图
+        g_call = dgl.graph((bi_src, bi_dst), num_nodes=g.num_nodes(), device=device)
+        g_call = dgl.add_self_loop(g_call)
         
         h_call = F.relu(self.gcn1(g_call, x))
         h_call = self.gcn2(g_call, h_call)

@@ -247,9 +247,9 @@ def build_records(df: pd.DataFrame, api_vocab, status_vocab, node_vocab,
 def main():
     parser = argparse.ArgumentParser()
     # [修正] 补全参数，保持与 SVND 一致
-    parser.add_argument("--normal", default="E:\ZJU\AIOps\Projects\TraDNN\Trace_mcp/app\dataset/tianchi\data/NormalData/normal_traces_mapped.csv")
-    parser.add_argument("--service", default="E:\ZJU\AIOps\Projects\TraDNN\Trace_mcp/app\dataset/tianchi\data/ServiceFault/all_fault_traces_mapped.csv")
-    parser.add_argument("--node", default="E:\ZJU\AIOps\Projects\TraDNN\Trace_mcp/app\dataset/tianchi\data/NodeFault/all_fault_traces_mapped.csv", help="不使用，但保留参数兼容性")
+    parser.add_argument("--normal", default="/root/wzc/Trace_mcp/app/dataset/tianchi/data/NormalData/normal_traces_mapped.csv")
+    parser.add_argument("--service", default="/root/wzc/Trace_mcp/app/dataset/tianchi/data/ServiceFault/all_fault_traces_mapped.csv")
+    parser.add_argument("--node", default="/root/wzc/Trace_mcp/app/dataset/tianchi/data/NodeFault/all_fault_traces_mapped.csv", help="不使用，但保留参数兼容性")
     parser.add_argument("--outdir", default="dataset/tianchi/processed_0111")
     parser.add_argument("--win-minutes", type=float, default=3.0, help="Context时间窗口")
     parser.add_argument("--min-trace-size", type=int, default=2)

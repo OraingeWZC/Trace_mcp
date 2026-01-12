@@ -1,13 +1,10 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-正常时段数据获取工具 (Baseline Data Fetcher) - 修复版
-
-逻辑：
-1. 读取 b_gt.csv，找到最早的故障时间 (Min Start Time)。
-2. 定义正常时间窗：[最早故障时间 - 2小时, 最早故障时间 - 1小时]。
-3. Metric: 获取该时段所有活跃 ECS 的性能指标 (支持 --interval 重采样)。
-4. Trace: 获取该时段 try_cast(statusCode as bigint) <= 1 的正常 Trace。
+正常时段数据获取工具 (Baseline Data Fetcher) - 最终版
+- 支持 --window-hours 自定义时间窗
+- 支持 --file-name 自定义文件名后缀 (防止覆盖)
+- 包含悬浮节点/断链严格检查
 """
 
 import os
@@ -38,7 +35,7 @@ TARGET_METRICS = [
     "aggregate_node_disk_io_usage"
 ]
 
-# # 2. SLS 配置
+# 2. SLS 配置
 PROJECT_NAME = config.SLS_PROJECT_NAME
 LOGSTORE_NAME = config.SLS_LOGSTORE_NAME
 REGION = config.SLS_REGION
@@ -54,18 +51,38 @@ sys.path.insert(0, project_root)
 try:
     from tools.paas_entity_tools import umodel_get_entities
     from tools.paas_data_tools import umodel_get_golden_metrics
-    from tools.common import create_cms_client, execute_cms_query
-    from tools.constants import REGION_ID, WORKSPACE_NAME
+    from tools.common import create_cms_client
     from aliyun.log import LogClient, GetLogsRequest
     from alibabacloud_sts20150401.client import Client as StsClient
     from alibabacloud_sts20150401 import models as sts_models
     from alibabacloud_tea_openapi import models as open_api_models
+    from tools.constants import REGION_ID
 except ImportError as e:
     print(f"❌ 依赖缺失: {e}")
     sys.exit(1)
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+# === 悬浮节点检查 ===
+def check_orphan_root(spans: list) -> bool:
+    """检查 Trace 是否存在断链 (允许最多 1 个悬浮根节点)"""
+    if not spans: return False
+    
+    span_ids = set()
+    for s in spans:
+        sid = str(s.get('SpanId', '')).strip()
+        if sid: span_ids.add(sid)
+    
+    roots = {"", "nan", "None", "null", "-1", "0"}
+    dangling_count = 0
+    
+    for s in spans:
+        pid = str(s.get('ParentID', '')).strip()
+        if pid not in span_ids and pid not in roots:
+            dangling_count += 1
+            
+    return dangling_count <= 1
 
 class NormalDataFetcher:
     def __init__(self, args):
@@ -101,23 +118,29 @@ class NormalDataFetcher:
         logger.info(f"📅 正在扫描 {self.args.csv} 计算基准时间...")
         min_ts = float('inf')
         
-        with open(self.args.csv, 'r', encoding='utf-8') as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                try:
-                    ts = int(datetime.strptime(row['start_time'], '%Y-%m-%d %H:%M:%S').timestamp())
-                    if ts < min_ts: min_ts = ts
-                except: continue
+        if os.path.exists(self.args.csv):
+            with open(self.args.csv, 'r', encoding='utf-8') as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    try:
+                        ts = int(datetime.strptime(row['start_time'], '%Y-%m-%d %H:%M:%S').timestamp())
+                        if ts < min_ts: min_ts = ts
+                    except: continue
+        else:
+            logger.warning(f"⚠️ 未找到 {self.args.csv}，使用当前时间作为基准")
+            min_ts = int(time.time())
         
-        # 定义：最早故障前 2小时 ~ 前 1小时
+        # 定义：最早故障前 2小时 ~ 前 window_seconds小时
         end_time = min_ts - 3600
-        start_time = end_time - 3600
+        window_seconds = int(self.args.window_hours * 3600)
+        start_time = end_time - window_seconds
         
         logger.info(f"✅ 选定正常时段: {datetime.fromtimestamp(start_time)} ~ {datetime.fromtimestamp(end_time)}")
+        logger.info(f"   (窗口: {self.args.window_hours}h, 基准故障前缓冲: 1h)")
         return start_time, end_time
 
     def fetch_metrics(self, start_ts, end_ts):
-        """步骤 2: 获取 Metric 数据 (支持重采样)"""
+        """步骤 2: 获取 Metric 数据"""
         logger.info("🚀 [Metric] 开始获取正常时段的节点指标...")
         
         entity_query = {
@@ -137,7 +160,10 @@ class NormalDataFetcher:
         if self.args.interval:
             logger.info(f"   ⏱️ 已启用重采样: 每 {self.args.interval} 秒聚合一条数据")
         
-        csv_path = os.path.join(self.output_dir, "normal_metrics.csv")
+        # [修改] 使用后缀构造文件名
+        filename = f"normal_metrics_{self.args.file_name}.csv"
+        csv_path = os.path.join(self.output_dir, filename)
+        
         headers = ['problem_id', 'fault_type', 'instance_id', 'timestamp'] + sorted(TARGET_METRICS)
         
         rows_to_write = []
@@ -169,7 +195,7 @@ class NormalDataFetcher:
                             if t not in node_data: node_data[t] = {}
                             node_data[t][m_name] = v
             
-            # 🔥 重采样逻辑
+            # 重采样
             if self.args.interval and self.args.interval > 0 and node_data:
                 try:
                     # 1. 转 DataFrame
@@ -196,7 +222,7 @@ class NormalDataFetcher:
 
             # 整理为 CSV 行
             for ts, metrics in node_data.items():
-                if not metrics: continue # 跳过空行
+                if not metrics: continue
                 row = {
                     'problem_id': 'normal_000',
                     'fault_type': 'normal',
@@ -217,7 +243,7 @@ class NormalDataFetcher:
         logger.info(f"\n✅ [Metric] 已保存 {len(rows_to_write)} 条指标数据至 {csv_path}")
 
     def fetch_traces(self, start_ts, end_ts):
-        """步骤 3: 获取 Trace 数据 (严格过滤版 - 逻辑对齐 build_trace_dataset.py)"""
+        """步骤 3: 获取 Trace 数据 (含严格过滤)"""
         logger.info("🚀 [Trace] 开始获取正常时段的 Trace...")
         
         # 1. 初筛: 获取包含至少一个正常Span的候选TraceID
@@ -227,9 +253,11 @@ class NormalDataFetcher:
         
         candidate_trace_ids = set()
         offset = 0
+        target_candidates = int(limit * 2.0) 
         
-        # 批量获取候选 ID
-        while len(candidate_trace_ids) < limit * 1.5: # 多获取一点，因为本地过滤会丢弃一部分
+        logger.info(f"   目标: 获取 {limit} 条纯净 Trace，预计需扫描 {target_candidates} 个候选 ID...")
+        
+        while len(candidate_trace_ids) < target_candidates:
             req = GetLogsRequest(PROJECT_NAME, LOGSTORE_NAME, query=query, fromTime=start_ts, toTime=end_ts, line=100, offset=offset)
             try:
                 res = self.sls_client.get_logs(req)
@@ -238,14 +266,18 @@ class NormalDataFetcher:
                 for log in logs:
                     candidate_trace_ids.add(log.get_contents().get('traceId'))
                 offset += len(logs)
+                print(f"   已扫描 {offset} 条日志，发现 {len(candidate_trace_ids)} 个候选 TraceID...", end='\r')
                 if len(logs) < 100: break
             except Exception as e:
                 logger.error(f"SLS Query Error: {e}")
                 break
         
-        logger.info(f"   已获取 {len(candidate_trace_ids)} 个候选 TraceID，正在进行严格过滤和拉取...")
+        logger.info(f"\n   扫描结束。开始拉取并严格清洗 {len(candidate_trace_ids)} 个 Trace...")
         
-        csv_path = os.path.join(self.output_dir, "normal_traces.csv")
+        # [修改] 使用后缀构造文件名
+        filename = f"normal_traces{self.args.file_name}.csv"
+        csv_path = os.path.join(self.output_dir, filename)
+        
         csv_headers = [
             'TraceID', 'SpanId', 'ParentID', 'ServiceName', 'NodeName', 'PodName', 
             'URL', 'SpanKind', 'StartTimeMs', 'EndTimeMs', 'DurationMs',
@@ -303,7 +335,7 @@ class NormalDataFetcher:
                                     'StartTimeMs': f"{s_ms:.3f}",
                                     'EndTimeMs': f"{s_ms + d_ms:.3f}",
                                     'DurationMs': f"{d_ms:.3f}",
-                                    'StatusCode': d.get('statusCode'), # 原始状态码
+                                    'StatusCode': d.get('statusCode'),
                                     'HttpStatusCode': "",
                                     'fault_type': 'normal',
                                     'fault_instance': 'unknown',
@@ -319,24 +351,20 @@ class NormalDataFetcher:
                 rows_to_save = []
                 for tid, spans in trace_buffer.items():
                     if not spans: continue
-                    
-                    # 1. 过滤掉包含异常Span的Trace (Status > 1)
-                    is_dirty = False
+                    if len(spans) < 2: continue
+
+                    is_error = False
                     for span in spans:
                         try:
                             # 兼容处理：有些statusCode可能是空或非数字，视作0
                             sc = int(span['StatusCode']) if span['StatusCode'] and span['StatusCode'].isdigit() else 0
-                            if sc > 1:
-                                is_dirty = True
-                                break
+                            if sc > 1: is_error = True; break
                         except: pass
-                    
-                    if is_dirty: continue # 丢弃整条 Trace
-                    
-                    # 2. 过滤掉过短的 Trace (可选，参考 build_trace_dataset 逻辑)
-                    if len(spans) < 2: continue
+                    if is_error: continue
 
-                    # 3. 通过检查，加入保存队列
+                    # 严格悬浮检查
+                    if not check_orphan_root(spans): continue
+
                     rows_to_save.extend(spans)
                     valid_trace_count += 1
                 
@@ -351,17 +379,20 @@ class NormalDataFetcher:
 
     def run(self):
         s_ts, e_ts = self.determine_time_window()
-        self.fetch_metrics(s_ts, e_ts)
+        # 获取指标时，额外多往前拉 3 分钟
+        self.fetch_metrics(s_ts - 180, e_ts)
         self.fetch_traces(s_ts, e_ts)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--csv", default="dataset/b_gt.csv", help="故障列表路径")
     parser.add_argument("--output-dir", default="data/NormalData", help="输出目录")
-    parser.add_argument("--trace-limit", type=int, default=70000, help="获取多少条正常 Trace")
+    parser.add_argument("--trace-limit", type=int, default=200000, help="获取多少条正常 Trace")
+    parser.add_argument("--interval", type=int, default=10, help="指标重采样间隔(秒)")
     
-    # 🔥 新增参数：默认不传则保留原始精度(约10s)，传 60 则聚合为 1分钟
-    parser.add_argument("--interval", type=int, default=10, help="指标重采样间隔(秒)，例如 60")
+    # [新增] 参数
+    parser.add_argument("--window-hours", type=float, default=12.0, help="获取故障前多少小时的数据")
+    parser.add_argument("--file-name", type=str, default="traces2e5", help="输出文件名后缀 (例如 '_v1')")
     
     args = parser.parse_args()
 

@@ -109,9 +109,10 @@ def main():
     parser.add_argument("--mapping", default="data/ecs_mapping_index.json", help="映射文件路径")
     parser.add_argument("--inputs", nargs="+", 
                         default=[
-                            "data/NormalData/normal_traces.csv",
-                            "data/ServiceFault/all_fault_traces.csv",
-                            "data/NodeFault/all_fault_traces.csv"
+                            # "data/NormalData/normal_traces.csv",
+                            # "data/ServiceFault/all_fault_traces.csv",
+                            # "data/NodeFault/all_fault_traces.csv"
+                            "data/NormalData/normal_traces2e5.csv"
                         ],
                         help="需要处理的 CSV 文件列表")
     parser.add_argument("--suffix", default="_mapped", help="输出文件后缀 (例如 _mapped)")

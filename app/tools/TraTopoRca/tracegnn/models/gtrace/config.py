@@ -7,7 +7,7 @@ from typing import *
 class ExpConfig(mltk.Config):
     # 基础训练配置
     device: str = 'cuda'
-    dataset: str = '0112'
+    dataset: str = '0114_2'
     # 提示：为了快速验证可以把 test_dataset 暂时设为 'val'，正式评估应为 'test'
     test_dataset: str = 'test'
     seed: int = 1234
@@ -101,7 +101,9 @@ class ExpConfig(mltk.Config):
             "aggregate_node_cpu_usage",
             "aggregate_node_memory_usage",
             "aggregate_node_disk_io_usage",
-            "aggregate_node_net_receive_packages_errors_per_minute"
+            "aggregate_node_net_receive_packages_errors_per_minute",
+            "aggregate_node_tcp_alloc_total_num",
+            "aggregate_node_tcp_inuse_total_num"
         ]
         include_disk: bool = False          # 是否包含磁盘时间类指标
         W: int = 3                          # 回看窗口（分钟）

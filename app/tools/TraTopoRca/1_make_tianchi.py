@@ -4,25 +4,25 @@
 make_aiops_v5.py - 独立阶段A数据处理
 - 训练集和验证集：100%正常数据
 - 测试集：90%正常数据 + 10%异常数据（服务异常:节点异常=1:1）
-- 所有参数可通过命令行控制
+- 新增：根据指标数据过滤 Trace，剔除无法映射到物理主机的 Trace
 """
 import argparse, os, json, random, hashlib, time
-from typing import Optional, List, Dict, Tuple
+from typing import Optional, List, Dict, Tuple, Set
 from collections import defaultdict, Counter
 import pandas as pd
 import numpy as np
 from tqdm import tqdm
 
 # ======= 默认路径/超参 =======
-# NORMAL_DIR = '/root/wzc/aiops25/SplitTrace0611/normal/2025-06-08_09_10_11_normal_traces.csv'
-# SERVICE_DIR = '/root/wzc/aiops25/SplitTrace0611/service/2025-06-08_09_10_11_spans.csv'
-# NODE_DIR    = '/root/wzc/aiops25/SplitTrace0611/node/2025-06-08_09_10_11_spans.csv'
-# OUT_DIR     = 'dataset/dataset_08_09_10_11/raw'
-
 NORMAL_DIR = '/root/wzc/Trace_mcp/app/dataset/tianchi/data/NormalData/normal_traces1e5_30s_mapped.csv'
 SERVICE_DIR = '/root/wzc/Trace_mcp/app/dataset/tianchi/data/ServiceFault/all_fault_traces_mapped.csv'
 NODE_DIR    = '/root/wzc/Trace_mcp/app/dataset/tianchi/data/NodeFault/all_fault_traces_mapped.csv'
-OUT_DIR     = 'dataset/tianchi/0113/raw'
+OUT_DIR     = 'dataset/tianchi/0114_2/raw'
+
+# [新增] 指标数据路径 (用于过滤无指标的 Trace)
+METRIC_ROOT = 'dataset/tianchi' # 或 dataset/tianchi/data/NormalData 等，脚本会自动查找
+NORMAL_METRIC_FILE = 'normal_metrics_1e5_30s.csv'
+FAULT_METRIC_FILE  = 'all_metrics_30s.csv'
 
 # 新的默认参数
 TOTAL_TRACES_DEFAULT = 80000         # 总trace数量
@@ -49,6 +49,108 @@ IGNORE_SERVICE = {}
 SYN = {}
 
 # ======= 工具函数 =======
+
+# [新增] 加载指标数据中的 Host ID 集合
+def get_valid_hosts_from_metrics(dataset_root: str, filenames: List[str]) -> Set[str]:
+    """
+    加载指定指标文件，提取所有有效的 kubernetes_node ID。
+    逻辑参考 2_process_tianchi.py 的 load_infra_data_from_parent
+    """
+    valid_hosts = set()
+    parent_dir = os.path.dirname(dataset_root.rstrip(os.path.sep))
+
+    for filename in filenames:
+        # 定义查找路径列表 (按优先级排序)
+        paths_to_try = [
+            os.path.join(dataset_root, filename),
+            os.path.join(parent_dir, filename),
+            os.path.join(dataset_root, 'data', filename),
+            os.path.join(dataset_root, 'NormalData', filename),
+            os.path.join(parent_dir, 'data', filename),
+            os.path.join(parent_dir, 'infra', filename),
+        ]
+        
+        infra_path = None
+        for p in paths_to_try:
+            if os.path.exists(p):
+                infra_path = p
+                break
+        
+        if not infra_path:
+            print(f"⚠️ 警告: 未找到指标数据文件: {filename}，将跳过该文件的 Host 加载。")
+            continue
+            
+        print(f"    正在从指标文件加载 Host: {infra_path}")
+        try:
+            # 只读取需要的列以节省内存
+            df = pd.read_csv(infra_path, usecols=['instance_id'])
+            if 'instance_id' in df.columns:
+                # 转换为字符串并去重
+                hosts = df['instance_id'].dropna().astype(str).unique()
+                valid_hosts.update(hosts)
+                print(f"    -> 提取到 {len(hosts)} 个 Host")
+            else:
+                print(f"    ❌ 错误: 文件 {filename} 缺少 'instance_id' 列")
+        except Exception as e:
+            print(f"    ❌ 解析指标数据失败 {filename}: {e}")
+            
+    print(f"✅ 总计有效 Metric Host 数量: {len(valid_hosts)}")
+    return valid_hosts
+
+# [新增] 过滤无法映射到 Host 的 Traces
+def filter_unmapped_traces(df: pd.DataFrame, valid_hosts: Set[str], trace_col: str = 'TraceID') -> pd.DataFrame:
+    """
+    智能过滤：
+    1. NodeName 为空/NaN -> 保留 (视为外部服务或无指标组件，如 inventory)
+    2. NodeName 有值但不在 valid_hosts -> 剔除 (数据缺失)
+    3. NodeName 有值且在 valid_hosts -> 保留
+    """
+    if df.empty or not valid_hosts:
+        return df
+    
+    print(f"    指标映射检查前: {df[trace_col].nunique()} traces")
+    
+    node_col = '_node'
+    # 确保 _node 列存在且经过清洗
+    if node_col not in df.columns:
+        if 'NodeName' in df.columns:
+            # fillna("") 非常重要，确保 NaN 变成空字符串，方便统一处理
+            df['_node'] = df['NodeName'].fillna("").astype(str).str.strip()
+        else:
+            return df
+    
+    # 获取所有非空的节点名称
+    # 注意：我们这里只提取"有字符的"节点名进行校验
+    all_nodes = df[node_col].unique()
+    
+    # 找出"有名但无效"的节点
+    # 逻辑：如果 node 不是空字符串，且不在 valid_hosts 里，就是非法的
+    invalid_named_nodes = set()
+    
+    for node in all_nodes:
+        # 如果是空字符串或 'nan' (字符串形式)，我们要保留，不视为 invalid
+        if node == "" or node.lower() == "nan":
+            continue
+            
+        if node not in valid_hosts:
+            invalid_named_nodes.add(node)
+    
+    if not invalid_named_nodes:
+        print(f"    -> 所有具名 Host 均校验通过 (空节点已自动豁免)。")
+        return df
+    
+    print(f"    -> 发现 {len(invalid_named_nodes)} 个具名 Host 无指标 (e.g., {list(invalid_named_nodes)[:3]}) -> 将剔除相关 Trace")
+    
+    # 找出包含无效具名 Node 的 TraceID
+    invalid_traces_mask = df[node_col].isin(invalid_named_nodes)
+    invalid_trace_ids = df.loc[invalid_traces_mask, trace_col].unique()
+    
+    # 过滤
+    filtered_df = df[~df[trace_col].isin(invalid_trace_ids)].copy()
+    
+    print(f"    指标映射检查后: {filtered_df[trace_col].nunique()} traces (剔除 {len(invalid_trace_ids)} 条)")
+    return filtered_df
+
 # 过滤
 def filter_short_traces(df: pd.DataFrame, trace_col: str, min_spans: int) -> pd.DataFrame:
     """过滤掉span数量少于min_spans的trace"""
@@ -71,7 +173,7 @@ def filter_short_traces(df: pd.DataFrame, trace_col: str, min_spans: int) -> pd.
 
     # 统计span数量分布
     span_dist = trace_span_counts.value_counts().sort_index()
-    print(f"    Span数量分布: {dict(span_dist.head(10))}")  # 显示前10个
+    # print(f"    Span数量分布: {dict(span_dist.head(10))}")  # 显示前10个
 
     return filtered_df
 
@@ -79,10 +181,7 @@ def filter_multi_root_traces(df: pd.DataFrame,
                              trace_col: str,
                              span_col: str,
                              parent_col: str) -> pd.DataFrame:
-    """过滤掉在同一 Trace 中存在多个“根”的 Trace。
-    根的判定：ParentID 为 -1，或 ParentID 缺失/空，或 ParentID 不在本 Trace 的 Span 集合中。
-    保留根数 <= 1 的 Trace，根数 > 1 的 Trace 整条剔除。
-    """
+    """过滤掉在同一 Trace 中存在多个“根”的 Trace。"""
     if df.empty:
         return df
 
@@ -175,12 +274,6 @@ def load_csv(path: str) -> pd.DataFrame:
 
 # ======= 导出为 data_to_torch 期望的CSV =======
 def to_torch_csv(df: pd.DataFrame) -> pd.DataFrame:
-    """将当前管线中的列，转换为 data_to_torch.py 及对接需求期望的列集合。
-    目标列（按顺序）：
-    TraceID, SpanID, ParentID, OperationName, NodeName, ServiceName, PodName,
-    HttpStatusCode, StatusCode, SpanKind, StartTimeMs, EndTimeMs, Duration,
-    Anomaly, RootCause, FaultCategory
-    """
     if df is None or df.empty:
         return pd.DataFrame()
 
@@ -194,7 +287,7 @@ def to_torch_csv(df: pd.DataFrame) -> pd.DataFrame:
         out['SpanID'] = df['SpanId'].astype(str) if 'SpanId' in df.columns else ''
     out['ParentID'] = df['ParentID'].astype(str)
 
-    # OperationName：优先现有列，但对非法值（'', 'nan', '-1', 'none', 'null'）回退到 URL 模板/URL
+    # OperationName
     if 'OperationName' in df.columns:
         op = df['OperationName'].astype(str)
         op_norm = op.str.strip()
@@ -268,19 +361,16 @@ def to_torch_csv(df: pd.DataFrame) -> pd.DataFrame:
         except Exception:
             out['Duration'] = 0
 
-    # Anomaly：fault_type 非空视为 1，否则 0
+    # Anomaly
     if 'fault_type' in df.columns:
         ft_series = df['fault_type'].fillna('').astype(str).str.strip()
         out['Anomaly'] = (ft_series != '').astype(int)
     elif 'Anomaly' in df.columns:
-        # 若原数据已有 Anomaly，则转为 0/1
         out['Anomaly'] = df['Anomaly'].astype(int)
     else:
         out['Anomaly'] = 0
 
-    # RootCause 与 FaultCategory：直接来自原数据集字段
-    # - RootCause = fault_instance（正常 Trace 为空值，不写入 'nan' 字符串）
-    # - FaultCategory = fault_type（正常 Trace 为空值）
+    # RootCause 与 FaultCategory
     if 'fault_instance' in df.columns:
         out['RootCause'] = df['fault_instance'].fillna('').astype(str)
     elif 'RootCause' in df.columns:
@@ -566,6 +656,12 @@ def main():
 
     t0 = time.time()
     print("=== 独立阶段A数据处理 ===")
+    
+    # [新增] 步骤 0: 加载指标数据中的 valid hosts
+    print(f"[0/6] 加载指标数据 Host 列表...")
+    hosts_normal = get_valid_hosts_from_metrics(METRIC_ROOT, [NORMAL_METRIC_FILE])
+    hosts_fault = get_valid_hosts_from_metrics(METRIC_ROOT, [FAULT_METRIC_FILE])
+
     print(f"[1/6] 读取CSV文件...")
     
     # 加载数据
@@ -573,16 +669,27 @@ def main():
     df_service = load_csv(args.service_fault)
     df_node = load_csv(args.node_fault)
 
-    # 立即过滤单span trace
-    print(f"[1.5/6] 过滤单span trace (min_spans={args.min_trace_spans})...")
+    # 1.5 步：数据清洗流程
+    print(f"[1.5/6] 执行数据清洗...")
+    
+    # (a) 过滤单span trace
+    print(f"  > 过滤单span trace (min_spans={args.min_trace_spans})...")
     df_normal = filter_short_traces(df_normal, 'TraceID', args.min_trace_spans)
     df_service = filter_short_traces(df_service, 'TraceID', args.min_trace_spans)
     df_node = filter_short_traces(df_node, 'TraceID', args.min_trace_spans)
 
-    # 1.5 步：过滤多根 Trace（ParentID 为 -1 / 缺失 / 不在本 Trace 的 Span 集合）
+    # (b) 过滤多根 Trace
+    print(f"  > 过滤多根 Trace...")
     df_normal = filter_multi_root_traces(df_normal, 'TraceID', 'SpanId', 'ParentID')
     df_service = filter_multi_root_traces(df_service, 'TraceID', 'SpanId', 'ParentID')
     df_node = filter_multi_root_traces(df_node, 'TraceID', 'SpanId', 'ParentID')
+
+    # [新增] (c) 过滤无指标数据的 Trace
+    print(f"  > [Normal Data] 严格过滤：Trace 必须适配 {NORMAL_METRIC_FILE} ...")
+    df_normal = filter_unmapped_traces(df_normal, hosts_normal, 'TraceID')
+    print(f"  > [Fault Data] 严格过滤：Trace 必须适配 {FAULT_METRIC_FILE} ...")
+    df_service = filter_unmapped_traces(df_service, hosts_fault, 'TraceID')
+    df_node = filter_unmapped_traces(df_node, hosts_fault, 'TraceID')
 
     # 归一化故障类型并筛选
     df_service["fault_type"] = df_service["fault_type"].apply(norm_fault)
@@ -592,9 +699,26 @@ def main():
     df_service = df_service[df_service["fault_type"].isin(SERVICE_FAULTS)]
     df_node = df_node[df_node["fault_type"].isin(NODE_FAULTS)]
 
-    print(f"  正常数据 (过滤后): {df_normal['TraceID'].nunique()} traces")
-    print(f"  服务故障 (过滤后): {df_service['TraceID'].nunique()} traces")
-    print(f"  节点故障 (过滤后): {df_node['TraceID'].nunique()} traces")
+    # 统计当前可用总数
+    cnt_normal = df_normal['TraceID'].nunique()
+    cnt_svc = df_service['TraceID'].nunique()
+    cnt_node = df_node['TraceID'].nunique()
+    
+    print(f"  清洗后可用数据统计:")
+    print(f"    - 正常数据: {cnt_normal} traces")
+    print(f"    - 服务故障: {cnt_svc} traces")
+    print(f"    - 节点故障: {cnt_node} traces")
+    
+    # [新增] 检查是否满足 TOTAL_TRACES_DEFAULT
+    # 正常数据的需求量大致是 total * (train + val + test_normal)
+    # 这里简单判断：如果正常数据不够，则缩减总目标
+    needed_normal_ratio = args.train_ratio + args.val_ratio + (args.test_ratio * args.test_normal_ratio)
+    max_possible_by_normal = int(cnt_normal / needed_normal_ratio)
+    
+    if max_possible_by_normal < args.total_traces:
+        print(f"\n⚠️ 警告: 正常数据量 ({cnt_normal}) 不足以支持预设的总目标 ({args.total_traces})。")
+        print(f"   将总目标调整为: {max_possible_by_normal}")
+        args.total_traces = max_possible_by_normal
 
     # 计算数据分配
     allocations = allocate_traces_by_ratio(

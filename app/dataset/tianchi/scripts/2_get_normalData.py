@@ -456,8 +456,8 @@ if __name__ == "__main__":
     parser.add_argument("--interval", type=int, default=30, help="指标重采样间隔(秒)")
     
     # [新增] 参数
-    parser.add_argument("--window-hours", type=float, default=12.0, help="获取故障前多少小时的数据")
-    parser.add_argument("--file-name", type=str, default="1e5_30s", help="输出文件名后缀 (例如 '_v1')")
+    parser.add_argument("--window-hours", type=float, default=2.0, help="获取故障前多少小时的数据")
+    parser.add_argument("--file-name", type=str, default="2e5_30s_2h", help="输出文件名后缀 (例如 '_v1')")
     
     args = parser.parse_args()
 

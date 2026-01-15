@@ -13,7 +13,7 @@ from tracegnn.data.trace_graph_db import TraceGraphDB, BytesSqliteDB
 from tracegnn.utils.host_state import host_state_vector
 
 # ================= 配置区域 =================
-DEFAULT_DATASET_ROOT = 'dataset/tianchi/0113' 
+DEFAULT_DATASET_ROOT = 'dataset/tianchi/0114_2' 
 # 指标文件名，请确保这与你 3_allfault_nodeMetric.py 生成的文件名一致
 NORMAL_METRIC_FILE = 'normal_metrics_1e5_30s.csv'  # 用于 Train/Val 集
 FAULT_METRIC_FILE  = 'all_metrics_30s.csv'     # 用于 Test 集
@@ -130,21 +130,26 @@ def load_infra_data_from_parent(dataset_root: str, filename: str):
 def precompute_host_states(trace_graphs, infra_index, id_manager, W=3):
     if infra_index is None: return
     
-    # [修改] 强制使用天池指标列表作为 GNN 的输入特征
     metrics = TIANCHI_METRICS
     per_metric_dims = 4  # mean, std, max, min
+    
+    # [新增] 计算特征总维度，用于生成零向量 (6个指标 * 4个统计量 = 24维)
+    feature_dim = len(metrics) * per_metric_dims
+    zero_vec = np.zeros(feature_dim, dtype=np.float32)
 
     stats = {
         "total_graphs": len(trace_graphs),
         "processed_graphs": 0,
-        "total_spans_with_host": 0,  # 有 HostID 的 Span 总数
-        "failed_metric_spans": 0,    # 映射失败的 Span 总数
-        "missing_hosts": set()       # 缺失数据的 Host 集合
+        "total_spans_with_host": 0,
+        "failed_metric_spans": 0,
+        "padded_nan_spans": 0, # [新增] 统计补零的span
+        "missing_hosts": set()
     }
 
     for graph in tqdm(trace_graphs, desc="预计算 HostState (GNN)"):
         try:
             stats["processed_graphs"] += 1
+            # ... (时间计算代码保持不变) ...
             st = graph.root.spans[0].start_time if (graph.root and graph.root.spans) else None
             if isinstance(st, (int, float)):
                 v = float(st)
@@ -153,43 +158,56 @@ def precompute_host_states(trace_graphs, infra_index, id_manager, W=3):
                 t0_ms = 0
             t0_min_ms = (t0_ms // 60000) * 60000
             
-            # 找出该 Trace 中所有涉及的 Host 节点
-            # iter_bfs 返回 (node_id, node_obj) 或者 node_obj，取决于具体实现
-            # 这里假设 graph.iter_bfs() 返回 (_, node)
             nodes_in_graph = [node for _, node in graph.iter_bfs() if node.host_id and node.host_id > 0]
-            
             host_ids = set(node.host_id for node in nodes_in_graph)
             host_state_map = {}
             
             for hid in host_ids:
                 hname = id_manager.host_id.rev(int(hid))
-                if hname:
-                    # 尝试获取指标向量
-                    vec = host_state_vector(hname, infra_index, t0_min_ms, metrics=metrics, W=W, per_metric_dims=per_metric_dims)
-                    if vec is not None:
-                        host_state_map[hid] = vec
-                    else:
-                        # [统计] 记录缺失数据的 Host
-                        stats["missing_hosts"].add(hname)
+                
+                # === [修改核心逻辑] ===
+                # 情况 1: 空节点或 NaN -> 补零向量
+                if not hname or str(hname).lower() == 'nan':
+                    host_state_map[hid] = zero_vec.copy()
+                    # 不计入 failed，甚至可以单独统计
+                    continue
+
+                # 情况 2: 正常节点 -> 查指标
+                # 尝试获取指标向量
+                vec = host_state_vector(hname, infra_index, t0_min_ms, metrics=metrics, W=W, per_metric_dims=per_metric_dims)
+                if vec is not None:
+                    host_state_map[hid] = vec
+                else:
+                    # 名字存在但找不到指标 (可能是时间对不上，或者真的缺失)
+                    # 策略: 记录错误，但也补零，保证图结构完整性 (可选)
+                    # 这里我们维持原策略: 记录缺失
+                    stats["missing_hosts"].add(hname)
+                    # 如果你希望模型鲁棒，也可以在这里补零:
+                    # host_state_map[hid] = zero_vec.copy() 
             
             if host_state_map:
                 graph.data['precomputed_host_state'] = host_state_map
             
-            # [统计] 计算 Span 级别的缺失情况
+            # [统计] 更新统计逻辑
             for node in nodes_in_graph:
                 stats["total_spans_with_host"] += 1
-                if node.host_id not in host_state_map:
+                if node.host_id in host_state_map:
+                    # 检查是否是补零的 NaN 节点 (简单判断: 特征全0)
+                    if np.all(host_state_map[node.host_id] == 0):
+                        stats["padded_nan_spans"] += 1
+                else:
                     stats["failed_metric_spans"] += 1
 
         except Exception:
             continue
 
-    # [新增] 输出统计报告
+    # ... (打印报告部分，可以增加 padded_nan_spans 的输出) ...
     print("\n" + "="*50)
     print("📊 [GNN 特征映射统计报告]")
     print(f"   - 总图数: {stats['total_graphs']}")
     print(f"   - 涉及物理机的 Span 总数: {stats['total_spans_with_host']}")
-    print(f"   - ❌ 指标映射失败 Span 数: {stats['failed_metric_spans']}")
+    print(f"   - ⚪ 补零处理 (NaN/Inventory): {stats['padded_nan_spans']}")
+    print(f"   - ❌ 映射失败 Span: {stats['failed_metric_spans']}")
     
     if stats['total_spans_with_host'] > 0:
         fail_rate = stats['failed_metric_spans'] / stats['total_spans_with_host'] * 100
@@ -266,7 +284,8 @@ def precompute_host_sequences(trace_graphs, infra_index, id_manager):
 
             for hid in host_ids:
                 hname = id_manager.host_id.rev(int(hid))
-                if not hname: continue
+                if not hname or str(hname).lower() == 'nan': 
+                    continue
                 
                 rec = infra_index.get(str(hname))
                 if not rec: continue

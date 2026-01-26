@@ -118,7 +118,7 @@ def process_csv_time_columns(csv_path):
 # ------------------- 主执行区 -------------------
 if __name__ == "__main__":
     # 请修改为你的CSV文件路径（绝对路径/相对路径均可）
-    CSV_FILE_PATH = "/root/wzc/Trace_mcp/app/dataset/tianchi/data/NormalData/normal_traces2e5_30s_6h.csv"  # 示例："D:/data/time_records.csv"
+    CSV_FILE_PATH = "/root/wzc/Trace_mcp/app/dataset/tianchi/data/NormalData/normal_traces4e5_30s_2h_new.csv"  # 示例："D:/data/time_records.csv"
     
     # 执行处理
     process_csv_time_columns(CSV_FILE_PATH)

@@ -419,15 +419,29 @@ class NormalDataFetcher:
                     if len(spans) < 2: continue
 
                     is_error = False
+                    is_out_of_window = False # [新增] 标记是否超出时间窗
+
                     for span in spans:
+                        # 1. 检查错误状态
                         try:
                             # 兼容处理：有些statusCode可能是空或非数字，视作0
                             sc = int(span['StatusCode']) if span['StatusCode'] and span['StatusCode'].isdigit() else 0
                             if sc > 1: is_error = True; break
                         except: pass
-                    if is_error: continue
+                        
+                        # 2. [新增] 检查开始时间是否早于窗口起始时间
+                        # start_ts 是秒级，StartTimeMs 是字符串毫秒，需转换
+                        try:
+                            span_start_ms = float(span['StartTimeMs'])
+                            if span_start_ms < start_ts * 1000:
+                                is_out_of_window = True
+                                break # 只要有一个 Span 早于窗口，整条 Trace 丢弃
+                        except: pass
 
-                    # 严格悬浮检查
+                    if is_error: continue
+                    if is_out_of_window: continue # [新增] 丢弃跨窗口的 Trace
+
+                    # 3. 严格悬浮检查
                     if not check_orphan_root(spans): continue
 
                     rows_to_save.extend(spans)
@@ -452,12 +466,12 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--csv", default="dataset/b_gt.csv", help="故障列表路径")
     parser.add_argument("--output-dir", default="data/NormalData", help="输出目录")
-    parser.add_argument("--trace-limit", type=int, default=200000, help="获取多少条正常 Trace")
+    parser.add_argument("--trace-limit", type=int, default=400000, help="获取多少条正常 Trace")
     parser.add_argument("--interval", type=int, default=30, help="指标重采样间隔(秒)")
     
     # [新增] 参数
-    parser.add_argument("--window-hours", type=float, default=2.0, help="获取故障前多少小时的数据")
-    parser.add_argument("--file-name", type=str, default="2e5_30s_2h", help="输出文件名后缀 (例如 '_v1')")
+    parser.add_argument("--window-hours", type=float, default=6.0, help="获取故障前多少小时的数据")
+    parser.add_argument("--file-name", type=str, default="4e5_30s_6h_new", help="输出文件名后缀 (例如 '_v1')")
     
     args = parser.parse_args()
 

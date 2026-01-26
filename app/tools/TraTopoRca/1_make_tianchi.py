@@ -14,10 +14,10 @@ import numpy as np
 from tqdm import tqdm
 
 # ======= 默认路径/超参 =======
-NORMAL_DIR = '/root/wzc/Trace_mcp/app/dataset/tianchi/data/NormalData/normal_traces1e5_30s_mapped.csv'
+NORMAL_DIR = '/root/wzc/Trace_mcp/app/dataset/tianchi/data/NormalData/normal_traces_2e5_1622_mapped.csv'
 SERVICE_DIR = '/root/wzc/Trace_mcp/app/dataset/tianchi/data/ServiceFault/all_fault_traces_mapped.csv'
 NODE_DIR    = '/root/wzc/Trace_mcp/app/dataset/tianchi/data/NodeFault/all_fault_traces_mapped.csv'
-OUT_DIR     = 'dataset/tianchi/0114_2/raw'
+OUT_DIR     = 'dataset/tianchi/2e5_1622/raw'
 
 # [新增] 指标数据路径 (用于过滤无指标的 Trace)
 METRIC_ROOT = 'dataset/tianchi' # 或 dataset/tianchi/data/NormalData 等，脚本会自动查找

@@ -6,11 +6,20 @@ import pandas as pd
 # Infra CSV loading (merged_all_infra.csv)
 INFRA_FILE_NAME = 'merged_all_infra.csv'
 INFRA_METRICS = [
+    # AIOps 旧列名 (保留)
     'node_cpu_usage_rate',
     'node_memory_usage_rate',
     'node_filesystem_usage_rate',
     'node_disk_read_time_seconds_total',
     'node_disk_write_time_seconds_total',
+    
+    # === 新增：天池真实列名 ===
+    "aggregate_node_cpu_usage",
+    "aggregate_node_memory_usage",
+    "aggregate_node_disk_io_usage",
+    "aggregate_node_net_receive_packages_errors_per_minute",
+    "aggregate_node_tcp_alloc_total_num",
+    "aggregate_node_tcp_inuse_total_num"
 ]
 
 

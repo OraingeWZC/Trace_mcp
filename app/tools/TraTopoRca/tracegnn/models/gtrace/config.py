@@ -7,7 +7,7 @@ from typing import *
 class ExpConfig(mltk.Config):
     # 基础训练配置
     device: str = 'cuda'
-    dataset: str = '0114_2'
+    dataset: str = '2e5_1622'
     # 提示：为了快速验证可以把 test_dataset 暂时设为 'val'，正式评估应为 'test'
     test_dataset: str = 'test'
     seed: int = 1234
@@ -16,16 +16,16 @@ class ExpConfig(mltk.Config):
     test_batch_size: int = 64
     # Maximum number of traces to evaluate (None or <=0 means no limit)
     max_eval_traces: Optional[int] = None
-    max_epochs: int = 1
+    max_epochs: int = 10
     enable_tqdm: bool = True
 
     # 数据集根目录（相对工程根目录或绝对路径）
     dataset_root_dir: str = 'dataset/tianchi'
     # 模型权重保存/读取路径：
-    model_path: str = 'save/tracebert/model.pth'
+    model_path: str = 'save/tracebert_10epo/model.pth'
 
     # 报告输出目录（相对 processed 目录或绝对路径）
-    report_dir: str = 'reports_0112'
+    report_dir: str = 'reports_0126'
     include_epoch_in_report_name: bool = True  # 报告文件名中是否包含 epoch 序号
 
     # 模型相关配置

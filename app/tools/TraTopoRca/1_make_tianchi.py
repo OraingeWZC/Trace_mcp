@@ -17,7 +17,7 @@ from tqdm import tqdm
 NORMAL_DIR = '/root/wzc/Trace_mcp/app/dataset/tianchi/data/NormalData/normal_traces_2e5_1622_mapped.csv'
 SERVICE_DIR = '/root/wzc/Trace_mcp/app/dataset/tianchi/data/ServiceFault/all_fault_traces_mapped.csv'
 NODE_DIR    = '/root/wzc/Trace_mcp/app/dataset/tianchi/data/NodeFault/all_fault_traces_mapped.csv'
-OUT_DIR     = 'dataset/tianchi/2e5_1622/raw'
+OUT_DIR     = 'dataset/tianchi/2e5_1622_minspan5/raw'
 
 # [新增] 指标数据路径 (用于过滤无指标的 Trace)
 METRIC_ROOT = 'dataset/tianchi' # 或 dataset/tianchi/data/NormalData 等，脚本会自动查找
@@ -34,7 +34,7 @@ TEST_FAULT_RATIO = 0.1               # 测试集中异常数据比例
 TEST_SVC_NODE_RATIO = 0.5            # 测试异常中服务异常比例
 
 SEED  = 2025
-MIN_TRACE_SPANS = 2                  # 丢弃单span trace
+MIN_TRACE_SPANS = 5                  # 丢弃单span trace
 
 # 允许的细类（7+3）
 SERVICE_FAULTS = {

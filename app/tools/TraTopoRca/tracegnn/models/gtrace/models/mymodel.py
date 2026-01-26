@@ -716,7 +716,27 @@ def latency_loss(config: ExpConfig, pred: dict, graphs: dgl.DGLGraph, clip: bool
     operation_cnt_dict  = torch.zeros([config.DatasetParams.operation_cnt], dtype=torch.long,  device=device)
 
     if config.Latency.embedding_type != 'class':
-        lat_loss_all = normal_loss(latency_label, pred['latency_mu'], pred['latency_logvar'], reduction='none')
+        # Stabilize training: unconstrained logvar can collapse to -inf (loss -> very negative) or blow up (exp overflow).
+        # Clamp only for the latency branch to keep other uses of normal_loss unchanged.
+        lat_logvar = pred['latency_logvar']
+        try:
+            lat_logvar = torch.clamp(lat_logvar, min=-6.0, max=6.0)
+        except Exception:
+            pass
+
+        if bool(getattr(config, "debug_nan", False)):
+            # Fail fast to locate NaN/Inf source.
+            for name, ten in [
+                ("latency_label", latency_label),
+                ("latency_mu", pred.get("latency_mu", None)),
+                ("latency_logvar", lat_logvar),
+            ]:
+                if ten is None:
+                    continue
+                if not bool(torch.isfinite(ten).all().item()):
+                    raise RuntimeError(f"Non-finite tensor in latency_loss: {name}")
+
+        lat_loss_all = normal_loss(latency_label, pred['latency_mu'], lat_logvar, reduction='none')
         lat_loss_node = torch.mean(lat_loss_all, dim=1)  # mean over feature dim
         opid_dev = opid_cpu.to(device)
         ones = torch.ones_like(opid_dev, dtype=torch.long, device=device)

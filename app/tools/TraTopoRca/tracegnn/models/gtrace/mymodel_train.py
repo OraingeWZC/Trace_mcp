@@ -56,6 +56,31 @@ def train_epoch(config: ExpConfig, loader: dgl.dataloading.GraphDataLoader,
         loss = pred["loss_total"]
         total_steps += 1
 
+        # Debug / safety: stop early on NaN/Inf to locate the first bad step.
+        if bool(getattr(config, "debug_nan", False)):
+            try:
+                if not bool(torch.isfinite(loss).item()):
+                    logger.error("[Debug] Non-finite loss_total at step=%s: %s", step, str(loss))
+                    for k in ["loss_structure", "loss_latency", "loss_host"]:
+                        v = pred.get(k, None) if isinstance(pred, dict) else None
+                        if v is not None:
+                            try:
+                                logger.error("[Debug] %s=%s finite=%s", k, str(v), bool(torch.isfinite(v).all().item()))
+                            except Exception:
+                                logger.error("[Debug] %s=%s", k, str(v))
+                    lv = pred.get("latency_logvar", None) if isinstance(pred, dict) else None
+                    if lv is not None:
+                        lv_det = lv.detach()
+                        logger.error(
+                            "[Debug] latency_logvar stats finite=%s min=%.6f max=%.6f",
+                            bool(torch.isfinite(lv_det).all().item()),
+                            float(lv_det.min().item()),
+                            float(lv_det.max().item()),
+                        )
+                    raise RuntimeError("Non-finite loss detected (debug_nan=True).")
+            except Exception:
+                raise
+
         # Set loss info
         total_loss += loss.item()
         structure_loss += pred["loss_structure"].item()

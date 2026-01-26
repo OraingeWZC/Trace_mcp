@@ -118,7 +118,8 @@ def normal_latency_to_feature(latency: torch.Tensor,
     result = (latency - mean) / std
 
     if clip: 
-        result = torch.minimum(result, torch.ones_like(result) * 5)
+        # Clip both sides to avoid extreme z-scores when dataset distribution shifts.
+        result = torch.clamp(result, min=-5.0, max=5.0)
 
     return result.unsqueeze(1)
 

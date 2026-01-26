@@ -537,8 +537,25 @@ def df_to_trace_graphs(df: pd.DataFrame,
                 trace_info[trace_id] = {
                     'anomaly': getattr(row, 'Anomaly', False),
                     'root_cause': getattr(row, 'RootCause', None),
-                    'fault_category': getattr(row, 'FaultCategory', None)
+                    'fault_category': getattr(row, 'FaultCategory', None),
                 }
+            else:
+                # Some datasets only populate trace-level labels on a subset of spans.
+                # If we already have the trace registered but label fields are still empty,
+                # try to fill them from later rows.
+                try:
+                    info = trace_info.get(trace_id, {})
+                    if info is not None:
+                        rc_prev = info.get('root_cause', None)
+                        fc_prev = info.get('fault_category', None)
+                        rc_cur = getattr(row, 'RootCause', None)
+                        fc_cur = getattr(row, 'FaultCategory', None)
+                        if (rc_prev is None or str(rc_prev).strip() in ('', 'nan', 'None', 'null')) and rc_cur is not None:
+                            info['root_cause'] = rc_cur
+                        if (fc_prev is None or str(fc_prev).strip() in ('', 'nan', 'None', 'null')) and fc_cur is not None:
+                            info['fault_category'] = fc_cur
+                except Exception:
+                    pass
 
             # 创建临时图节点
             span_dict[span_id] = TempGraphNode(
@@ -603,8 +620,29 @@ def df_to_trace_graphs(df: pd.DataFrame,
                     except Exception:
                         return 0
 
+                def _to_fault_category_id(v):
+                    """
+                    FaultCategory may be:
+                    - an int id (already mapped), or
+                    - a string name like 'cpu', 'memory', 'node cpuchaos', etc.
+                    Map names via id_manager.fault_category to keep evaluation consistent.
+                    """
+                    try:
+                        if isinstance(v, (int, float)):
+                            return int(v)
+                        s = (str(v) if v is not None else '').strip()
+                        if not s or s.lower() in ('nan', 'none', 'null'):
+                            return 0
+                        # numeric string -> int
+                        if s.replace('.', '', 1).isdigit():
+                            return int(float(s))
+                        # name string -> id
+                        return int(id_manager.fault_category.get_or_assign(s.lower()))
+                    except Exception:
+                        return 0
+
                 root_cause_id = _to_int_or_zero(info['root_cause'])
-                fault_category_id = _to_int_or_zero(info['fault_category'])
+                fault_category_id = _to_fault_category_id(info['fault_category'])
                 
                 trace_graphs.append(TraceGraph(
                     version=TraceGraph.default_version(),

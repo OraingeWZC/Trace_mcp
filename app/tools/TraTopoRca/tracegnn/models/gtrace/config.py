@@ -6,8 +6,8 @@ from typing import *
 # 实验配置（训练/评估运行所需参数与路径）
 class ExpConfig(mltk.Config):
     # 基础训练配置
-    device: str = 'cuda'
-    dataset: str = '2e5_1622'
+    device: str = 'cpu'
+    dataset: str = '2e5_1622_minspan5'
     # 提示：为了快速验证可以把 test_dataset 暂时设为 'val'，正式评估应为 'test'
     test_dataset: str = 'test'
     seed: int = 1234
@@ -18,11 +18,13 @@ class ExpConfig(mltk.Config):
     max_eval_traces: Optional[int] = None
     max_epochs: int = 10
     enable_tqdm: bool = True
+    # Debug helpers: set True to print/check NaN/Inf sources and fail fast.
+    debug_nan: bool = True
 
     # 数据集根目录（相对工程根目录或绝对路径）
     dataset_root_dir: str = 'dataset/tianchi'
     # 模型权重保存/读取路径：
-    model_path: str = 'save/tracebert_10epo/model.pth'
+    model_path: str = 'save/tracebert/model.pth'
 
     # 报告输出目录（相对 processed 目录或绝对路径）
     report_dir: str = 'reports_0126'

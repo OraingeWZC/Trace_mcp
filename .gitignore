@@ -1,5 +1,4 @@
 *__pycache__
-*data
 *dataset
 *results
 *.vscode
@@ -9,7 +8,8 @@
 *.DS_Store
 
 app/tools/TraTopoRca/score_distribution_debug.csv
-app/dataset/tianchi/.env
+app/data/tianchi/.env
+app/data/tianchi/data/*
 
 
 app/tools/tracezly_rca/processed/*

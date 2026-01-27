@@ -17,7 +17,7 @@ from tqdm import tqdm
 NORMAL_DIR = '/root/wzc/Trace_mcp/app/dataset/tianchi/data/NormalData/normal_traces_2e5_1622_mapped.csv'
 SERVICE_DIR = '/root/wzc/Trace_mcp/app/dataset/tianchi/data/ServiceFault/all_fault_traces_mapped.csv'
 NODE_DIR    = '/root/wzc/Trace_mcp/app/dataset/tianchi/data/NodeFault/all_fault_traces_mapped.csv'
-OUT_DIR     = 'dataset/tianchi/2e5_1622_minspan5/raw'
+OUT_DIR     = 'dataset/tianchi/2e5_1622_minspan5_demo/raw'
 
 # [新增] 指标数据路径 (用于过滤无指标的 Trace)
 METRIC_ROOT = 'dataset/tianchi' # 或 dataset/tianchi/data/NormalData 等，脚本会自动查找
@@ -297,6 +297,39 @@ def load_csv(path: str) -> pd.DataFrame:
     
     print(f"    加载完成: {df['TraceID'].nunique() if 'TraceID' in df.columns else 0} traces")
     return df
+
+
+def report_dataset_brief(df: pd.DataFrame, name: str, trace_col: str = 'TraceID', service_col: str = 'ServiceName') -> None:
+    """
+    打印一个紧凑的“数据健康度摘要”，用于快速发现过滤过度导致的服务词表塌缩等问题。
+    只打印少量 top services，避免输出过长。
+    """
+    try:
+        if df is None:
+            print(f"    [Stats:{name}] df=None")
+            return
+        if df.empty:
+            print(f"    [Stats:{name}] 空数据 (rows=0)")
+            return
+
+        rows = int(len(df))
+        traces = int(df[trace_col].nunique()) if trace_col in df.columns else -1
+        services = int(df[service_col].nunique()) if service_col in df.columns else -1
+
+        msg = f"    [Stats:{name}] rows={rows}"
+        if traces >= 0:
+            msg += f", traces={traces}"
+        if services >= 0:
+            msg += f", uniq_services={services}"
+        print(msg)
+
+        if service_col in df.columns:
+            vc = df[service_col].fillna('').astype(str).str.strip()
+            top = vc.value_counts().head(10)
+            top_str = "; ".join([f"{k if k else '<EMPTY>'}:{int(v)}" for k, v in top.items()])
+            print(f"    [Stats:{name}] top_services={top_str}")
+    except Exception as e:
+        print(f"    [Stats:{name}] 统计失败: {e}")
 
 # ======= 导出为 data_to_torch 期望的CSV =======
 def to_torch_csv(df: pd.DataFrame) -> pd.DataFrame:
@@ -702,6 +735,11 @@ def main():
     df_service = load_csv(args.service_fault)
     df_node = load_csv(args.node_fault)
 
+    # 快速健康度摘要：用于发现服务词表塌缩/过度过滤
+    report_dataset_brief(df_normal, "raw_normal")
+    report_dataset_brief(df_service, "raw_service_fault")
+    report_dataset_brief(df_node, "raw_node_fault")
+
     # 1.5 步：数据清洗流程
     print(f"[1.5/6] 执行数据清洗...")
     
@@ -711,11 +749,19 @@ def main():
     df_service = filter_short_traces(df_service, 'TraceID', args.min_trace_spans)
     df_node = filter_short_traces(df_node, 'TraceID', args.min_trace_spans)
 
+    report_dataset_brief(df_normal, f"after_minspan_normal(min={args.min_trace_spans})")
+    report_dataset_brief(df_service, f"after_minspan_service_fault(min={args.min_trace_spans})")
+    report_dataset_brief(df_node, f"after_minspan_node_fault(min={args.min_trace_spans})")
+
     # (b) 过滤多根 Trace
     print(f"  > 过滤多根 Trace...")
     df_normal = filter_multi_root_traces(df_normal, 'TraceID', 'SpanId', 'ParentID')
     df_service = filter_multi_root_traces(df_service, 'TraceID', 'SpanId', 'ParentID')
     df_node = filter_multi_root_traces(df_node, 'TraceID', 'SpanId', 'ParentID')
+
+    report_dataset_brief(df_normal, "after_single_root_normal")
+    report_dataset_brief(df_service, "after_single_root_service_fault")
+    report_dataset_brief(df_node, "after_single_root_node_fault")
 
     # [新增] (c) 过滤无指标数据的 Trace
     print(f"  > [Normal Data] 严格过滤：Trace 必须适配 {NORMAL_METRIC_FILE} ...")
@@ -723,6 +769,10 @@ def main():
     print(f"  > [Fault Data] 严格过滤：Trace 必须适配 {FAULT_METRIC_FILE} ...")
     df_service = filter_unmapped_traces(df_service, hosts_fault, 'TraceID', policy=args.unmapped_host_policy)
     df_node = filter_unmapped_traces(df_node, hosts_fault, 'TraceID', policy=args.unmapped_host_policy)
+
+    report_dataset_brief(df_normal, f"after_host_map_normal(policy={args.unmapped_host_policy})")
+    report_dataset_brief(df_service, f"after_host_map_service_fault(policy={args.unmapped_host_policy})")
+    report_dataset_brief(df_node, f"after_host_map_node_fault(policy={args.unmapped_host_policy})")
 
     # 归一化故障类型并筛选
     df_service["fault_type"] = df_service["fault_type"].apply(norm_fault)
@@ -787,6 +837,10 @@ def main():
     df_train = df_normal[df_normal['TraceID'].astype(str).isin(train_ids)]
     df_val   = df_normal[df_normal['TraceID'].astype(str).isin(val_ids)]
     df_test_normal = df_normal[df_normal['TraceID'].astype(str).isin(test_norm_ids)]
+
+    report_dataset_brief(df_train, "split_train_normal")
+    report_dataset_brief(df_val, "split_val_normal")
+    report_dataset_brief(df_test_normal, "split_test_normal")
 
     used_ids = set(train_ids) | set(val_ids) | set(test_norm_ids)
     print(f"  [去重检查] normal切分后 交集大小(train∩val, val∩test, train∩test): "
@@ -927,6 +981,8 @@ def main():
         df_test = pd.concat(test_dfs, ignore_index=True)
     else:
         df_test = pd.DataFrame()
+
+    report_dataset_brief(df_test, "split_test_total")
 
     def _ids(df): 
         return set(df['TraceID'].astype(str).unique()) if not df.empty else set()

@@ -46,6 +46,7 @@ def build_mapping(start_time_str, end_time_str, output_path):
     }
 
     res = umodel_get_entities.invoke(query)
+    print(res)
     if not res or not res.data:
         print("❌ 未查询到任何节点信息！")
         return
@@ -106,6 +107,6 @@ if __name__ == "__main__":
     # 建议时间范围覆盖整个比赛/数据采集周期
     START_TIME = "2025-09-16 00:00:00"
     END_TIME = "2025-09-24 23:59:59" # 根据实际情况调整
-    OUTPUT_FILE = "data/ecs_mapping_index.json"
+    OUTPUT_FILE = "data/ecs_mapping_index1.json"
     
     build_mapping(START_TIME, END_TIME, OUTPUT_FILE)

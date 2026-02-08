@@ -150,6 +150,7 @@ class NormalDataFetcher:
         
         logger.info(f"✅ 选定正常时段: {datetime.fromtimestamp(start_time)} ~ {datetime.fromtimestamp(end_time)}")
         logger.info(f"   (窗口: {self.args.window_hours}h, 基准故障前缓冲: 1h)")
+        
         return start_time, end_time
 
     def fetch_metrics(self, start_ts, end_ts):
@@ -468,7 +469,13 @@ class NormalDataFetcher:
         logger.info(f"\n✅ [Trace] 已保存 {valid_trace_count} 条纯净 Trace ({total_spans} Spans) 至 {csv_path}")
 
     def run(self):
-        s_ts, e_ts = self.determine_time_window()
+        # s_ts, e_ts = self.determine_time_window()
+
+        custom_start = "2026-01-20 20:00:00" 
+        custom_end = "2026-01-20 23:59:59"
+        s_ts = int(datetime.strptime(custom_start, "%Y-%m-%d %H:%M:%S").timestamp())
+        e_ts = int(datetime.strptime(custom_end, "%Y-%m-%d %H:%M:%S").timestamp())
+
         # 获取指标时，额外多往前拉 3 分钟
         self.fetch_metrics(s_ts - 180, e_ts)
         self.fetch_traces(s_ts, e_ts)
@@ -482,7 +489,7 @@ if __name__ == "__main__":
     
     # [新增] 参数
     parser.add_argument("--window-hours", type=float, default=4.0, help="获取故障前多少小时的数据")
-    parser.add_argument("--file-name", type=str, default="4e5_30s_4h_new", help="输出文件名后缀 (例如 '_v1')")
+    parser.add_argument("--file-name", type=str, default="4e5_30s_4h_0120", help="输出文件名后缀 (例如 '_v1')")
     
     args = parser.parse_args()
 

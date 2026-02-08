@@ -356,7 +356,7 @@ class NodeFaultProcessor:
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--csv", default="dataset/b_gt.csv", help="b_gt.csv path")
-    parser.add_argument("--output-dir", default="data/NodeFault", help="output directory")
+    parser.add_argument("--output-dir", default="data/NodeFault1", help="output directory")
     parser.add_argument("--limit", type=int, default=20000)
     parser.add_argument("--buffer", type=int, default=60)
     parser.add_argument("--range", help="Problem ID range (e.g. 1,100)")

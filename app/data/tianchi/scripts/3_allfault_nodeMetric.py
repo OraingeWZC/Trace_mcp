@@ -10,6 +10,10 @@ import ast
 from datetime import datetime
 import pandas as pd  # 核心：引入 pandas 进行数据聚合
 import numpy as np
+import logging
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 import config
 
@@ -33,9 +37,6 @@ TARGET_METRICS = [
 
 # 鉴权配置
 os.environ.setdefault("ALIBABA_CLOUD_ROLE_SESSION_NAME", "my-sls-access")
-
-project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, project_root)
 
 from tools.paas_entity_tools import umodel_get_entities
 from tools.paas_data_tools import umodel_get_golden_metrics
@@ -333,11 +334,35 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--csv", default="dataset/b_gt.csv", help="路径指向 b_gt.csv")
     parser.add_argument("--unified", action="store_true", help="启用统一模式")
-    parser.add_argument("--output-dir", default="data/NodeMetric", help="自定义输出目录")
-    
-    # 🔥 新增参数
+    parser.add_argument("--output-dir", default="data/NodeMetric1", help="自定义输出目录")
     parser.add_argument("--interval", type=int, default=30, help="重采样时间间隔(秒)，例如 60 表示每分钟一条")
+    parser.add_argument("--test", action="store_true", help="开启测试模式，拉取指定时段数据")
+    parser.add_argument("--start", default="2025-09-16 00:00:00", help="测试模式开始时间")
+    parser.add_argument("--end", default="2025-09-24 23:59:59", help="测试模式结束时间")
     
     args = parser.parse_args()
+    
+    # 初始化抓取器
     fetcher = BatchCustomMetricFetcher(args.csv, args.output_dir, args.unified, args.interval)
-    fetcher.run()
+
+    if args.test:
+        # ================= 测试模式逻辑 =================
+        logger.info(f"🧪 进入测试模式! 准备拉取时段: {args.start} ~ {args.end}")
+        test_row = {
+            'problem_id': 'TEST_DEBUG',
+            'fault_type': 'manual_test',
+            'start_time': args.start,
+            'end_time': args.end
+        }
+        # 直接调用核心处理函数
+        n_nodes, n_records = fetcher.fetch_metrics_for_problem(test_row)
+        
+        if n_nodes > 0:
+            logger.info(f"✅ 测试成功! 抓取到 {n_nodes} 个节点的指标。")
+            logger.info(f"💾 请查看目录: {args.output_dir}")
+        else:
+            logger.error("❌ 测试失败，未抓取到任何数据。请检查 AK/SK 或该时段节点活跃度。")
+        # ===============================================
+    else:
+        # 原有逻辑：跑全量 CSV
+        fetcher.run()

@@ -7,7 +7,7 @@ from typing import *
 class ExpConfig(mltk.Config):
     # 基础训练配置
     device: str = 'cpu'
-    dataset: str = '2e5_1622_minspan5'
+    dataset: str = '0120_nostatus'
     # 提示：为了快速验证可以把 test_dataset 暂时设为 'val'，正式评估应为 'test'
     test_dataset: str = 'test'
     seed: int = 1234
@@ -27,7 +27,7 @@ class ExpConfig(mltk.Config):
     model_path: str = 'save/demo/model.pth'
 
     # 报告输出目录（相对 processed 目录或绝对路径）
-    report_dir: str = 'reports_0126_demo'
+    report_dir: str = 'reports_0208'
     include_epoch_in_report_name: bool = True  # 报告文件名中是否包含 epoch 序号
 
     # 模型相关配置

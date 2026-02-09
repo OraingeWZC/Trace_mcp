@@ -70,7 +70,8 @@ def check_orphan_root(spans: list) -> bool:
     检查 Trace 是否存在断链与多根
     找出所有“拓扑根”：即 ParentID 不指向当前 Trace 中任何已知 Span 的节点。(包含三种情况：ParentID为空、ParentID为-1、ParentID指向不存在的ID)
        """
-    if not spans: return False
+    if not spans: 
+        return False
     
     # 1. 建立当前 Trace 所有 SpanID 的集合 (白名单)
     span_ids = set()
@@ -186,7 +187,7 @@ class NormalDataFetcher:
         
         rows_to_write = []
         
-        # [关键设置] 分片大小设为 30分钟 (1800s)
+        # 分片大小设为 30分钟 (1800s)
         # 时间跨度短时，API 会返回原始高精度数据 (如 10s/15s)；跨度长时会自动聚合为 60s
         CHUNK_SIZE = 1800
 
@@ -322,8 +323,7 @@ class NormalDataFetcher:
         logger.info("🚀 [Trace] 开始获取正常时段的 Trace...")
         
         # 1. 初筛: 获取包含至少一个正常Span的候选TraceID
-        # (这里还是用宽泛查询，因为我们会在本地做二次严格检查)
-        query = "* | where try_cast(statusCode as bigint) <= 1"
+        query = "*"
         limit = self.args.trace_limit
         
         candidate_trace_ids = set()
@@ -477,19 +477,17 @@ class NormalDataFetcher:
         e_ts = int(datetime.strptime(custom_end, "%Y-%m-%d %H:%M:%S").timestamp())
 
         # 获取指标时，额外多往前拉 3 分钟
-        self.fetch_metrics(s_ts - 180, e_ts)
+        # self.fetch_metrics(s_ts - 180, e_ts)
         self.fetch_traces(s_ts, e_ts)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--csv", default="dataset/b_gt.csv", help="故障列表路径")
     parser.add_argument("--output-dir", default="data/NormalData", help="输出目录")
-    parser.add_argument("--trace-limit", type=int, default=400000, help="获取多少条正常 Trace")
+    parser.add_argument("--trace-limit", type=int, default=40, help="获取多少条正常 Trace")
     parser.add_argument("--interval", type=int, default=30, help="指标重采样间隔(秒)")
-    
-    # [新增] 参数
     parser.add_argument("--window-hours", type=float, default=4.0, help="获取故障前多少小时的数据")
-    parser.add_argument("--file-name", type=str, default="4e5_30s_4h_0120", help="输出文件名后缀 (例如 '_v1')")
+    parser.add_argument("--file-name", type=str, default="4e5_30s_4h_0120", help="输出文件名后缀")
     
     args = parser.parse_args()
 

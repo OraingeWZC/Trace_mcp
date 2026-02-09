@@ -94,6 +94,9 @@ def explore_and_query():
     target_node = nodes[0]
     entity_id = target_node.get('__entity_id__')
     instance_id = node.get('instance_id')
+
+    entity_id = '171841f737d4b9b22fb9e83a2a3136f3'
+    instance_id = 'i-m5e2a4ls4q90u0zi92vi'
     print(f"✅ 选定目标节点: {instance_id} (ID: {entity_id})")
 
     # 2. 调用黄金指标接口获取该节点的所有时序数据

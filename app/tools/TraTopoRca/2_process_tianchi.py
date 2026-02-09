@@ -14,7 +14,7 @@ from tracegnn.data.trace_graph_db import TraceGraphDB, BytesSqliteDB
 from tracegnn.utils.host_state import host_state_vector
 
 # ================= 配置区域 =================
-DEFAULT_DATASET_ROOT = 'dataset/tianchi/2e5_1622' 
+DEFAULT_DATASET_ROOT = 'dataset/tianchi/nor0120' 
 
 # [修改] 现在统一使用合并后的文件名
 INFRA_FILENAME = 'merged_all_infra.csv'

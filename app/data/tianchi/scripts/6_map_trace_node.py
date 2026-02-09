@@ -106,13 +106,13 @@ def process_file(input_path, output_path, mapping):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--mapping", default="data/ecs_mapping_index.json", help="映射文件路径")
+    parser.add_argument("--mapping", default="data/ecs_mapping_250916_260131.json", help="映射文件路径")
     parser.add_argument("--inputs", nargs="+", 
                         default=[
                             # "data/NormalData/normal_traces.csv",
                             # "data/ServiceFault/all_fault_traces.csv",
                             # "data/NodeFault/all_fault_traces.csv"
-                            "data/NormalData/normal_traces_9e4_1618.csv"
+                            "data/NormalData/normal_traces2e5_0120_nostatus.csv"
                         ],
                         help="需要处理的 CSV 文件列表")
     parser.add_argument("--suffix", default="_mapped", help="输出文件后缀 (例如 _mapped)")

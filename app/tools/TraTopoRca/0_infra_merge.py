@@ -4,7 +4,7 @@ import numpy as np
 
 # ================= 配置路径 =================
 # 原始的两个天池指标文件
-FILE_NORMAL = 'dataset/tianchi/normal_metrics_2e5_1622.csv'
+FILE_NORMAL = 'dataset/tianchi/normal_metrics_2e5_0120.csv'
 FILE_FAULT  = 'dataset/tianchi/all_metrics_30s.csv'
 
 # 目标输出路径 (模拟 AIOps 的标准命名)

@@ -46,7 +46,7 @@ def build_mapping(start_time_str, end_time_str, output_path):
     }
 
     res = umodel_get_entities.invoke(query)
-    print(res)
+    # print(res)
     if not res or not res.data:
         print("❌ 未查询到任何节点信息！")
         return
@@ -64,6 +64,7 @@ def build_mapping(start_time_str, end_time_str, output_path):
     ids = set()
     
     for node in res.data:
+        print(node)
         instance_id = node.get('instance_id')
         if not instance_id: continue
         

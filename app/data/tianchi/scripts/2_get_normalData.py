@@ -113,6 +113,7 @@ class NormalDataFetcher:
             access_key_secret=os.environ["ALIBABA_CLOUD_ACCESS_KEY_SECRET"],
             endpoint=f'sts.{REGION}.aliyuncs.com'
         )
+        print(config)
         sts_client = StsClient(config)
         resp = sts_client.assume_role(sts_models.AssumeRoleRequest(
             role_arn=os.environ["ALIBABA_CLOUD_ROLE_ARN"],
@@ -477,8 +478,8 @@ class NormalDataFetcher:
         e_ts = int(datetime.strptime(custom_end, "%Y-%m-%d %H:%M:%S").timestamp())
 
         # 获取指标时，额外多往前拉 3 分钟
-        # self.fetch_metrics(s_ts - 180, e_ts)
-        self.fetch_traces(s_ts, e_ts)
+        self.fetch_metrics(s_ts - 180, e_ts)
+        # self.fetch_traces(s_ts, e_ts)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

@@ -25,8 +25,8 @@ except ImportError as e:
 # === 2. 配置区域 ===
 
 # 🕒 查询时间段 (过去 10 分钟)
-START_TIME_STR = "2026-01-20 18:20:33"
-END_TIME_STR = "2026-01-30 22:20:33"
+START_TIME_STR = "2026-02-10 18:20:33"
+END_TIME_STR = "2026-02-11 22:20:33"
 
 START_TIME = datetime.strptime(START_TIME_STR, "%Y-%m-%d %H:%M:%S")
 START_TIME = int(START_TIME.timestamp())
@@ -85,19 +85,24 @@ def explore_and_query():
     for i, node in enumerate(nodes):
         output_filename = "acs_nodes_list.json"
         open(output_filename, 'w', encoding='utf-8').write(json.dumps(node, ensure_ascii=False, indent=2))
-        nodename = node.get('provider_id') 
+        nodename = node.get('__entity_id__') 
         name = node.get('name') or node.get('nodeName') or node.get('instance_id')
         
         print(f"   [{i}] Name: {name:<25} | ID: {nodename}")
     
     # 获取节点指标
-    target_node = nodes[0]
+    for node in nodes:
+        # 增加容错：先判断key是否存在，避免KeyError
+        if node.get('instance_id') == 'i-m5e6bpio1kzxs4xv1xr2':
+            target_node = node
+    # print(target_node)
+    # target_node = nodes[1]
     entity_id = target_node.get('__entity_id__')
-    instance_id = node.get('instance_id')
+    instance_id = target_node.get('instance_id')
 
-    entity_id = '171841f737d4b9b22fb9e83a2a3136f3'
-    instance_id = 'i-m5e2a4ls4q90u0zi92vi'
-    print(f"✅ 选定目标节点: {instance_id} (ID: {entity_id})")
+    # entity_id = '4144404b62452488af0f87a39fa8e9ec'
+    # instance_id = 'i-m5e6bpio1kzxs4xv1xr2'
+    # print(f"✅ 选定目标节点: {instance_id} (ID: {entity_id})")
 
     # 2. 调用黄金指标接口获取该节点的所有时序数据
     print(f"📊 正在请求全量指标详情...")

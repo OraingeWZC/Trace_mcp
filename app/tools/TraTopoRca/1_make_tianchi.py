@@ -6,7 +6,7 @@ make_aiops_v5.py - 独立阶段A数据处理
 - 测试集：90%正常数据 + 10%异常数据（服务异常:节点异常=1:1）
 - 新增：根据指标数据过滤 Trace，剔除无法映射到物理主机的 Trace
 """
-import argparse, os, json, random, hashlib, time
+import argparse, os, json, random, time
 from typing import Optional, List, Dict, Tuple, Set
 from collections import defaultdict, Counter
 import pandas as pd
@@ -238,10 +238,6 @@ def filter_multi_root_traces(df: pd.DataFrame,
     print(f"    过滤多根trace: {n_before} -> {n_after} (剔除 {len(drop_traces)} traces)")
     return df
 
-def md5mod(s: str, mod=100) -> int:
-    h = hashlib.md5(s.strip().encode("utf-8")).hexdigest()
-    return int(h[:8], 16) % mod
-
 def url_template(u: str) -> str:
     if not isinstance(u, str): return "NA"
     core = u.split("?")[0].split("#")[0]
@@ -330,6 +326,108 @@ def report_dataset_brief(df: pd.DataFrame, name: str, trace_col: str = 'TraceID'
             print(f"    [Stats:{name}] top_services={top_str}")
     except Exception as e:
         print(f"    [Stats:{name}] 统计失败: {e}")
+
+
+def report_nodename_coverage(
+    df: pd.DataFrame,
+    valid_hosts: Set[str],
+    name: str,
+    trace_col: str = "TraceID",
+    node_col: str = "NodeName",
+) -> Dict[str, object]:
+    """
+    NodeName/Host 覆盖率健康度报告。
+
+    关注两类“会影响主机级 RCA 的典型问题”：
+    1) NodeName 为空（''/NaN/'nan'）：这类 span 无法参与主机拓扑/主机根因定位
+    2) NodeName 具名但不在 valid_hosts（指标 instance_id 集合）里：
+       在 mask_node 策略下会被清空；在 drop_trace 下会导致整条 trace 被删除
+    """
+    try:
+        if df is None:
+            out = {"name": name, "rows": 0, "traces": 0, "note": "df=None"}
+            print(f"    [NodeName:{name}] df=None")
+            return out
+        if df.empty:
+            out = {"name": name, "rows": 0, "traces": 0, "note": "empty"}
+            print(f"    [NodeName:{name}] 空数据 (rows=0)")
+            return out
+
+        rows = int(len(df))
+        traces = int(df[trace_col].nunique()) if trace_col in df.columns else -1
+
+        if node_col not in df.columns:
+            out = {
+                "name": name,
+                "rows": rows,
+                "traces": traces,
+                "note": f"missing_col:{node_col}",
+            }
+            print(f"    [NodeName:{name}] 缺少列 {node_col}，跳过覆盖率统计")
+            return out
+
+        # 统一清洗 NodeName：空/NaN 归一为 ''，方便统计
+        node_s = df[node_col].fillna("").astype(str).str.strip()
+        is_empty = (node_s == "") | (node_s.str.lower() == "nan")
+        is_named = ~is_empty
+
+        # 注意：valid_hosts 为空时，不做映射判定，只统计空/非空
+        if valid_hosts:
+            is_invalid_named = is_named & (~node_s.isin(valid_hosts))
+            is_valid_named = is_named & node_s.isin(valid_hosts)
+            invalid_nodes = sorted(set(node_s[is_invalid_named].unique().tolist()))
+        else:
+            is_invalid_named = is_named & False
+            is_valid_named = is_named
+            invalid_nodes = []
+
+        empty_rows = int(is_empty.sum())
+        named_rows = int(is_named.sum())
+        valid_named_rows = int(is_valid_named.sum())
+        invalid_named_rows = int(is_invalid_named.sum())
+
+        empty_traces = int(df.loc[is_empty, trace_col].nunique()) if trace_col in df.columns else -1
+        valid_named_traces = int(df.loc[is_valid_named, trace_col].nunique()) if trace_col in df.columns else -1
+        invalid_named_traces = int(df.loc[is_invalid_named, trace_col].nunique()) if trace_col in df.columns else -1
+
+        # 以表格形式打印（便于你快速判断 host 信息是否塌缩）
+        print(f"    [NodeName:{name}] 覆盖率统计")
+        header = (
+            f"      {'Metric':<18} | {'Rows':>10} | {'Traces':>10} | {'Ratio(rows)':>11}"
+        )
+        print(header)
+        print(f"      {'-'*18}-+-{'-'*10}-+-{'-'*10}-+-{'-'*11}")
+
+        def _row(metric: str, r: int, t: int, ratio: float) -> None:
+            print(f"      {metric:<18} | {r:>10d} | {t:>10d} | {ratio:>10.2%}")
+
+        _row("total", rows, traces if traces >= 0 else 0, 1.0)
+        _row("empty", empty_rows, empty_traces if empty_traces >= 0 else 0, empty_rows / max(rows, 1))
+        _row("named", named_rows, (traces - empty_traces) if (traces >= 0 and empty_traces >= 0) else 0, named_rows / max(rows, 1))
+        if valid_hosts:
+            _row("valid_named", valid_named_rows, valid_named_traces if valid_named_traces >= 0 else 0, valid_named_rows / max(rows, 1))
+            _row("invalid_named", invalid_named_rows, invalid_named_traces if invalid_named_traces >= 0 else 0, invalid_named_rows / max(rows, 1))
+
+        if invalid_nodes:
+            print(f"      invalid_named 示例(最多10个): {invalid_nodes[:10]}")
+
+        return {
+            "name": name,
+            "rows": rows,
+            "traces": traces,
+            "empty_rows": empty_rows,
+            "empty_traces": empty_traces,
+            "named_rows": named_rows,
+            "valid_named_rows": valid_named_rows,
+            "invalid_named_rows": invalid_named_rows,
+            "valid_named_traces": valid_named_traces,
+            "invalid_named_traces": invalid_named_traces,
+            "invalid_named_examples": invalid_nodes[:10],
+            "valid_hosts_count": int(len(valid_hosts)) if valid_hosts else 0,
+        }
+    except Exception as e:
+        print(f"    [NodeName:{name}] 覆盖率统计失败: {e}")
+        return {"name": name, "error": str(e)}
 
 # ======= 导出为 data_to_torch 期望的CSV =======
 def to_torch_csv(df: pd.DataFrame) -> pd.DataFrame:
@@ -446,12 +544,6 @@ def to_torch_csv(df: pd.DataFrame) -> pd.DataFrame:
 
     return out
 
-def dump_jsonl(path: str, items: List[dict], desc: str):
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "w", encoding="utf-8") as f:
-        for r in tqdm(items, total=len(items), desc=desc, ncols=100):
-            f.write(json.dumps(r, ensure_ascii=False) + "\n")
-
 # ======= 轻量"滚词" =======
 def roll_vocabs(df: pd.DataFrame,
                 cols: Dict[str,str],
@@ -496,155 +588,12 @@ def roll_vocabs(df: pd.DataFrame,
     pbar.close()
 
 # ======= 记录构建 =======
-def build_records(df: pd.DataFrame, cols: Dict[str,str],
-                  api_vocab: Dict[str,int], status_vocab: Dict[int,int], node_vocab: Dict[str,int],
-                  fixed_c3: Optional[int], fault_type_col: str,
-                  freeze_vocab: bool,
-                  min_trace_size: int = MIN_TRACE_SPANS,
-                  service_vocab: Optional[Dict[str,int]] = None,
-                  desc: str = "build records") -> List[dict]:
-    if df.empty:
-        return []
-        
-    trace_col = cols["trace"]; span_col=cols["span"]; parent_col=cols["parent"]
-    svc_col=cols["svc"]; st_col=cols["start"]; et_col=cols["end"]
-
-    records: List[dict] = []
-    nunique = int(df[trace_col].astype(str).nunique())
-    pbar = tqdm(total=nunique, desc=desc, ncols=100)
-
-    for tid, g in df.groupby(trace_col, sort=False):
-        g = g.sort_values(by=[st_col, et_col, span_col], kind="mergesort").reset_index(drop=True)
-        # if len(g) < min_trace_size:
-        #     pbar.update(1); continue
-
-        # 词表 & id 映射
-        n = len(g)
-        api_ids = np.zeros(n, dtype=np.int64)
-        stat_ids= np.zeros(n, dtype=np.int64)
-        node_ids= np.zeros(n, dtype=np.int64)
-        service_ids = np.zeros(n, dtype=np.int64) if service_vocab is not None else None
-
-        for i, row in g.iterrows():
-            api_key = make_api_key(row[svc_col], row["url_tmpl"])
-            if not freeze_vocab and api_key not in api_vocab:
-                api_vocab[api_key] = len(api_vocab) + 1
-            api_ids[i] = api_vocab.get(api_key, 0)
-
-            # 状态取 HttpStatusCode；NaN→0
-            status = 0
-            if "HttpStatusCode" in g.columns and not pd.isna(row["HttpStatusCode"]):
-                status = int(row["HttpStatusCode"])
-            if not freeze_vocab and status not in status_vocab:
-                status_vocab[status] = len(status_vocab) + 1
-            stat_ids[i] = status_vocab.get(status, 0)
-
-            node = str(row["_node"])
-            if not freeze_vocab and node not in node_vocab:
-                node_vocab[node] = len(node_vocab) + 1
-            node_ids[i] = node_vocab.get(node, 0)
-
-            if service_vocab is not None:
-                svc = str(row[svc_col]) if pd.notna(row[svc_col]) else "NA"
-                if not freeze_vocab and svc not in service_vocab:
-                    service_vocab[svc] = len(service_vocab) + 1
-                service_ids[i] = service_vocab.get(svc, 0)
-
-        # parent 索引
-        id_to_idx = {str(sid): i for i, sid in enumerate(g[span_col].astype(str).tolist())}
-        parent_idx = []
-        for pid in g[parent_col].astype(str).tolist():
-            j = id_to_idx.get(pid, None)
-            parent_idx.append(-1 if (j is None or pid in ["", "nan", "NaN"]) else j)
-
-        # 儿子表
-        children = [[] for _ in range(n)]
-        for c, p in enumerate(parent_idx):
-            if p >= 0:
-                children[p].append(c)
-
-        # 根集合（允许多根）
-        roots = [i for i,p in enumerate(parent_idx) if p < 0]
-        if not roots:
-            roots = [0]  # 默认第一个为根
-
-        # 全覆盖 DFS
-        order: List[int] = []
-        visited = [False]*n
-        for r in sorted(roots, key=lambda j: (float(g.loc[j, st_col]) if pd.notna(g.loc[j, st_col]) else 0.0)):
-            if visited[r]: continue
-            stack=[r]
-            while stack:
-                u=stack.pop()
-                if visited[u]: continue
-                visited[u]=True
-                order.append(u)
-                for v in reversed(children[u]):
-                    if not visited[v]:
-                        stack.append(v)
-        if len(order) < n:
-            for i in range(n):
-                if not visited[i]: order.append(i)
-
-        pos_map = {i:p for p,i in enumerate(order)}
-        depth=[0]*n
-        for u in order:
-            p=parent_idx[u]
-            depth[u] = 0 if p<0 else (depth[p]+1)
-
-        # 边（父子）
-        edges = [(p,c) for c,p in enumerate(parent_idx) if p>=0]
-
-        # 弱监督 rca: 最大延迟节点
-        lat = g["lat_ms"].values.astype(float)
-        rca_idx = int(np.argmax(lat)) if n>0 else 0
-
-        # 标签：y_bin / y_c3 / fault_type
-        ft = g[fault_type_col].iloc[0] if fault_type_col in g.columns else None
-        ft = norm_fault(ft) if isinstance(ft, str) else None
-        if ft in IGNORE_SERVICE:
-            ft = None
-
-        if isinstance(ft, str) and ft.strip():
-            if ft in SERVICE_FAULTS:
-                y_bin, y_c3 = 1, 1
-            elif ft in NODE_FAULTS:
-                y_bin, y_c3 = 1, 2
-            else:
-                y_bin, y_c3 = 0, 0
-        else:
-            y_bin, y_c3 = 0, 0
-
-        nodes=[]
-        for i in range(n):
-            nodes.append({
-                "api_id": int(api_ids[i]),
-                "status_id": int(stat_ids[i]),
-                "node_id": int(node_ids[i]),
-                "latency_ms": float(lat[i]) if not np.isnan(lat[i]) else 0.0,
-                "start_ms": float(g.loc[i, st_col]) if pd.notna(g.loc[i, st_col]) else 0.0,
-                "end_ms": float(g.loc[i, et_col]) if pd.notna(g.loc[i, et_col]) else 0.0,
-                "service": (str(g.loc[i, svc_col]) if pd.notna(g.loc[i, svc_col]) else "NA"),
-                "url_tmpl": str(g.loc[i, "url_tmpl"]),
-                "pos": int(pos_map.get(i, i)),
-                "depth": int(depth[i]),
-            })
-
-        records.append({
-            "trace_id": str(tid),
-            "nodes": nodes,
-            "edges": edges,
-            "dfs_order": order,
-            "y_bin": int(y_bin),
-            "y_c3": int(y_c3),
-            "fault_type": (ft if (ft and ft!="nan") else None),
-            "rca_idx": int(rca_idx),
-        })
-
-        pbar.update(1)
-
-    pbar.close()
-    return records
+#
+# NOTE:
+# 旧版实现里曾经在 1_make_tianchi.py 阶段就把 trace 构造成 JSONL records（build_records）。
+# 目前这条链路在本项目内没有后续消费点（训练/评估走的是 CSV + 后续处理脚本），且这段代码量较大，
+# 容易让人误以为这是主流程的一部分。
+# 因此这里移除 build_records，以减少维护成本；如未来确实需要 JSONL，可从历史版本恢复。
 
 # ======= 新的数据分配函数 =======
 def allocate_traces_by_ratio(total_traces: int, train_ratio: float, val_ratio: float, test_ratio: float,
@@ -740,6 +689,12 @@ def main():
     report_dataset_brief(df_service, "raw_service_fault")
     report_dataset_brief(df_node, "raw_node_fault")
 
+    # NodeName 覆盖率健康度：用于判断主机信息是否塌缩（会直接影响 host-level RCA）
+    nodename_reports: Dict[str, object] = {}
+    nodename_reports["raw_normal"] = report_nodename_coverage(df_normal, hosts_normal, "raw_normal")
+    nodename_reports["raw_service_fault"] = report_nodename_coverage(df_service, hosts_fault, "raw_service_fault")
+    nodename_reports["raw_node_fault"] = report_nodename_coverage(df_node, hosts_fault, "raw_node_fault")
+
     # 1.5 步：数据清洗流程
     print(f"[1.5/6] 执行数据清洗...")
     
@@ -773,6 +728,26 @@ def main():
     report_dataset_brief(df_normal, f"after_host_map_normal(policy={args.unmapped_host_policy})")
     report_dataset_brief(df_service, f"after_host_map_service_fault(policy={args.unmapped_host_policy})")
     report_dataset_brief(df_node, f"after_host_map_node_fault(policy={args.unmapped_host_policy})")
+
+    # 再看一遍 NodeName 覆盖率：mask_node 会让 invalid_named 变成 empty，drop_trace 会让 traces 下降
+    nodename_reports[f"after_host_map_normal(policy={args.unmapped_host_policy})"] = report_nodename_coverage(
+        df_normal, hosts_normal, f"after_host_map_normal(policy={args.unmapped_host_policy})"
+    )
+    nodename_reports[f"after_host_map_service_fault(policy={args.unmapped_host_policy})"] = report_nodename_coverage(
+        df_service, hosts_fault, f"after_host_map_service_fault(policy={args.unmapped_host_policy})"
+    )
+    nodename_reports[f"after_host_map_node_fault(policy={args.unmapped_host_policy})"] = report_nodename_coverage(
+        df_node, hosts_fault, f"after_host_map_node_fault(policy={args.unmapped_host_policy})"
+    )
+
+    # 落盘保存：便于你对比不同数据集/不同策略下 NodeName 的空值与映射失败比例
+    try:
+        out_path = os.path.join(args.outdir, f"nodename_health_{int(time.time())}.json")
+        with open(out_path, "w", encoding="utf-8") as f:
+            json.dump(nodename_reports, f, ensure_ascii=False, indent=2)
+        print(f"✅ NodeName 覆盖率报告已写出: {out_path}")
+    except Exception as e:
+        print(f"⚠️ NodeName 覆盖率报告写出失败: {e}")
 
     # 归一化故障类型并筛选
     df_service["fault_type"] = df_service["fault_type"].apply(norm_fault)
@@ -1031,21 +1006,8 @@ def main():
     else:
         print("  警告: 训练集为空，无法构建词表")
 
-    # 构建记录
-    print(f"[5/6] 构建JSONL记录...")
-    
-    rec_train = build_records(df_train, cols, api_vocab, status_vocab, node_vocab, fixed_c3=None,
-                              fault_type_col="fault_type", freeze_vocab=True,
-                              min_trace_size=args.min_trace_spans, service_vocab=service_vocab,
-                              desc="构建训练集") if not df_train.empty else []
-    rec_val   = build_records(df_val, cols, api_vocab, status_vocab, node_vocab, fixed_c3=None,
-                              fault_type_col="fault_type", freeze_vocab=True,
-                              min_trace_size=args.min_trace_spans, service_vocab=service_vocab,
-                              desc="构建验证集") if not df_val.empty else []
-    rec_test  = build_records(df_test, cols, api_vocab, status_vocab, node_vocab, fixed_c3=None,
-                              fault_type_col="fault_type", freeze_vocab=True,
-                              min_trace_size=args.min_trace_spans, service_vocab=service_vocab,
-                              desc="构建测试集") if not df_test.empty else []
+    # 旧版：这里会构建 JSONL records（build_records），但在当前数据链路中没有消费点，已移除。
+    print(f"[5/6] 跳过旧版 JSONL records 构建（已移除 build_records）...")
 
     # 输出CSV（对接 data_to_torch.py）
     print(f"[6/6] 写入CSV...")
@@ -1082,25 +1044,38 @@ def main():
     print(f"\n=== 处理完成 ===")
     print(f"输出目录: {args.outdir}")
     print(f"数据分布:")
-    print(f"  训练集: {len(rec_train)} traces (100% 正常)")
-    print(f"  验证集: {len(rec_val)} traces (100% 正常)")
-    
-    if rec_test:
-        test_normal = sum(1 for r in rec_test if r.get("y_bin", 0) == 0)
-        test_fault = sum(1 for r in rec_test if r.get("y_bin", 0) == 1)
-        test_svc = sum(1 for r in rec_test if r.get("fault_type") in SERVICE_FAULTS)
-        test_node = sum(1 for r in rec_test if r.get("fault_type") in NODE_FAULTS)
-        
-        print(f"  测试集: {len(rec_test)} traces")
-        print(f"    - 正常: {test_normal} traces ({test_normal/len(rec_test)*100:.1f}%)")
-        print(f"    - 异常: {test_fault} traces ({test_fault/len(rec_test)*100:.1f}%)")
+    train_traces = int(df_train["TraceID"].astype(str).nunique()) if (df_train is not None and not df_train.empty) else 0
+    val_traces = int(df_val["TraceID"].astype(str).nunique()) if (df_val is not None and not df_val.empty) else 0
+    test_traces = int(df_test["TraceID"].astype(str).nunique()) if (df_test is not None and not df_test.empty) else 0
+
+    print(f"  训练集: {train_traces} traces (100% 正常)")
+    print(f"  验证集: {val_traces} traces (100% 正常)")
+
+    if df_test is not None and not df_test.empty and "fault_type" in df_test.columns:
+        ft = df_test["fault_type"]
+        ft_str = ft.fillna("").astype(str).str.strip()
+
+        test_normal = int(df_test[ft_str == ""]["TraceID"].astype(str).nunique())
+        test_fault = int(df_test[ft_str != ""]["TraceID"].astype(str).nunique())
+        test_svc = int(df_test[ft_str.isin(SERVICE_FAULTS)]["TraceID"].astype(str).nunique())
+        test_node = int(df_test[ft_str.isin(NODE_FAULTS)]["TraceID"].astype(str).nunique())
+
+        print(f"  测试集: {test_traces} traces")
+        if test_traces > 0:
+            print(f"    - 正常: {test_normal} traces ({test_normal/test_traces*100:.1f}%)")
+            print(f"    - 异常: {test_fault} traces ({test_fault/test_traces*100:.1f}%)")
+        else:
+            print(f"    - 正常: {test_normal} traces")
+            print(f"    - 异常: {test_fault} traces")
+
         if test_fault > 0:
             print(f"      * 服务异常: {test_svc} traces ({test_svc/test_fault*100:.1f}%)")
             print(f"      * 节点异常: {test_node} traces ({test_node/test_fault*100:.1f}%)")
-    
-    # 故障类型统计
-    if rec_test:
-        fault_counts = Counter([r.get("fault_type") for r in rec_test if r.get('fault_type')])
+
+        # 故障类型统计（按 trace 去重）
+        fault_pairs = df_test[["TraceID", "fault_type"]].drop_duplicates()
+        fault_pairs = fault_pairs[fault_pairs["fault_type"].fillna("").astype(str).str.strip() != ""]
+        fault_counts = Counter(fault_pairs["fault_type"].astype(str).tolist())
         if fault_counts:
             print(f"  测试集故障类型分布: {dict(fault_counts)}")
     

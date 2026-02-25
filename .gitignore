@@ -9,7 +9,9 @@
 
 app/tools/TraTopoRca/score_distribution_debug.csv
 app/data/tianchi/.env
+app/data/tianchi/.envcopy
 app/data/tianchi/data/*
+app\data\tianchi\scripts\sts_metric_query_template.py
 
 
 app/tools/tracezly_rca/processed/*

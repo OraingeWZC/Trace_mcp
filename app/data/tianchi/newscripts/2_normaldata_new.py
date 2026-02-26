@@ -795,8 +795,8 @@ def main() -> None:
 
     parser.add_argument("--trace-query", default="*", help="SLS trace 查询语句（默认: *）")
     parser.add_argument("--page-size", type=int, default=100, help="SLS 分页大小（默认: 100）")
-    parser.add_argument("--max-trace-logs", type=int, default=400000, help="最多拉取多少条 span 日志（0 表示不限制）")
-    parser.add_argument("--trace-log-every",type=int, default=10000, help="Trace 扫描进度日志打印频率（0 表示关闭；默认: 2000）",)
+    parser.add_argument("--max-trace-logs", type=int, default=10000000, help="最多拉取多少条 span 日志（0 表示不限制）")
+    parser.add_argument("--trace-log-every",type=int, default=50000, help="Trace 扫描进度日志打印频率（0 表示关闭；默认: 2000）",)
     parser.add_argument("--k8s-node-limit", type=int, default=2000, help="k8s.node 实体查询上限（默认: 2000）")
     parser.add_argument(
         "--node-metrics-scope",
@@ -815,7 +815,7 @@ def main() -> None:
     parser.add_argument("--metric-aggregate", default="true", help="指标 aggregate（默认: true）")
 
     parser.add_argument("--output-dir", default="data/rca", help="输出目录（默认: data/demo）")
-    parser.add_argument("--suffix", default="_0217_4e5", help="输出文件名后缀（例如 _0210）")
+    parser.add_argument("--suffix", default="_0217_1e7", help="输出文件名后缀（例如 _0210）")
 
     args = parser.parse_args()
 

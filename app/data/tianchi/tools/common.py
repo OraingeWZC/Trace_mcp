@@ -146,7 +146,9 @@ class EntityContext(BaseModel):
 # Common utility functions
 def create_unified_config() -> open_api_models.Config:
     """Create unified Alibaba Cloud client configuration"""
-    role_arn = auth_util.environment_role_arn or 'acs:ram::1672753017899339:role/tianchi-user-a'
+    # 不要写死 RoleArn 默认值：是否走 STS AssumeRole 必须由环境变量显式控制。
+    # 否则在没有权限的账号下会触发 sts:AssumeRole 403（你现在遇到的就是这个问题）。
+    role_arn = auth_util.environment_role_arn or ""
     access_key_id = auth_util.environment_access_key_id
     access_key_secret = auth_util.environment_access_key_secret
     role_session_name = auth_util.environment_role_session_name or 'my-sls-access'

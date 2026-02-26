@@ -61,6 +61,9 @@ except ImportError as e:
     print(f"❌ 依赖缺失: {e}")
     sys.exit(1)
 
+print(f"REGION:{REGION}")
+print(f"WORKSPACE_NAME:{WORKSPACE_NAME}")
+
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
@@ -107,25 +110,52 @@ class NormalDataFetcher:
         self.sls_client = self._init_sls_client()
 
     def _init_sls_client(self):
-        """初始化 SLS 客户端 (带 STS)"""
-        config = open_api_models.Config(
-            access_key_id=os.environ["ALIBABA_CLOUD_ACCESS_KEY_ID"],
-            access_key_secret=os.environ["ALIBABA_CLOUD_ACCESS_KEY_SECRET"],
-            endpoint=f'sts.{REGION}.aliyuncs.com'
+        """
+        初始化 SLS 客户端。
+
+        支持两种模式：
+        1) STS AssumeRole：当配置了 ALIBABA_CLOUD_ROLE_ARN 时，先走 STS 换取临时凭证再访问 SLS；
+        2) 直连 AK/SK：当未配置 ALIBABA_CLOUD_ROLE_ARN 时，直接使用 AK/SK 初始化 SLS 客户端。
+        """
+
+        access_key_id = os.environ.get("ALIBABA_CLOUD_ACCESS_KEY_ID") or ""
+        access_key_secret = os.environ.get("ALIBABA_CLOUD_ACCESS_KEY_SECRET") or ""
+        if not access_key_id or not access_key_secret:
+            raise RuntimeError(
+                "缺少 ALIBABA_CLOUD_ACCESS_KEY_ID / ALIBABA_CLOUD_ACCESS_KEY_SECRET；"
+                "请在 app/data/tianchi/.env 中配置。"
+            )
+
+        endpoint = f"{REGION}.log.aliyuncs.com"
+        role_arn = os.environ.get("ALIBABA_CLOUD_ROLE_ARN") or ""
+
+        # Route B: 未配置 RoleArn 时，不再调用 STS AssumeRole，直接用 AK/SK 访问 SLS。
+        if not role_arn:
+            logger.info("未配置 ALIBABA_CLOUD_ROLE_ARN，使用 AK/SK 直连 SLS。")
+            return LogClient(endpoint=endpoint, accessKeyId=access_key_id, accessKey=access_key_secret)
+
+        # Route A: 配置了 RoleArn，则继续走 STS 获取临时凭证（向后兼容）。
+        sts_config = open_api_models.Config(
+            access_key_id=access_key_id,
+            access_key_secret=access_key_secret,
+            endpoint=f"sts.{REGION}.aliyuncs.com",
         )
-        print(config)
-        sts_client = StsClient(config)
-        resp = sts_client.assume_role(sts_models.AssumeRoleRequest(
-            role_arn=os.environ["ALIBABA_CLOUD_ROLE_ARN"],
-            role_session_name="normal-fetcher",
-            duration_seconds=3600
-        ))
+        # 避免打印包含密钥的配置对象
+        logger.info("已配置 ALIBABA_CLOUD_ROLE_ARN，使用 STS AssumeRole 获取临时凭证。")
+        sts_client = StsClient(sts_config)
+        resp = sts_client.assume_role(
+            sts_models.AssumeRoleRequest(
+                role_arn=role_arn,
+                role_session_name="normal-fetcher",
+                duration_seconds=3600,
+            )
+        )
         creds = resp.body.credentials
         return LogClient(
-            endpoint=f"{REGION}.log.aliyuncs.com",
+            endpoint=endpoint,
             accessKeyId=creds.access_key_id,
             accessKey=creds.access_key_secret,
-            securityToken=creds.security_token
+            securityToken=creds.security_token,
         )
 
     def determine_time_window(self):
@@ -334,7 +364,15 @@ class NormalDataFetcher:
         logger.info(f"   目标: 获取 {limit} 条纯净 Trace，预计需扫描 {target_candidates} 个候选 ID...")
         
         while len(candidate_trace_ids) < target_candidates:
-            req = GetLogsRequest(PROJECT_NAME, LOGSTORE_NAME, query=query, fromTime=start_ts, toTime=end_ts, line=100, offset=offset)
+            req = GetLogsRequest(
+                PROJECT_NAME, 
+                LOGSTORE_NAME, 
+                query=query, 
+                fromTime=start_ts, 
+                toTime=end_ts, 
+                line=100, 
+                offset=offset
+                )
             try:
                 res = self.sls_client.get_logs(req)
                 if not res or not res.get_logs(): break
@@ -472,14 +510,14 @@ class NormalDataFetcher:
     def run(self):
         # s_ts, e_ts = self.determine_time_window()
 
-        custom_start = "2026-01-20 20:00:00" 
-        custom_end = "2026-01-20 23:59:59"
+        custom_start = "2026-02-10 20:00:00" 
+        custom_end = "2026-02-10 23:59:59"
         s_ts = int(datetime.strptime(custom_start, "%Y-%m-%d %H:%M:%S").timestamp())
         e_ts = int(datetime.strptime(custom_end, "%Y-%m-%d %H:%M:%S").timestamp())
 
         # 获取指标时，额外多往前拉 3 分钟
-        self.fetch_metrics(s_ts - 180, e_ts)
-        # self.fetch_traces(s_ts, e_ts)
+        # self.fetch_metrics(s_ts - 180, e_ts)
+        self.fetch_traces(s_ts, e_ts)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -488,7 +526,7 @@ if __name__ == "__main__":
     parser.add_argument("--trace-limit", type=int, default=40, help="获取多少条正常 Trace")
     parser.add_argument("--interval", type=int, default=30, help="指标重采样间隔(秒)")
     parser.add_argument("--window-hours", type=float, default=4.0, help="获取故障前多少小时的数据")
-    parser.add_argument("--file-name", type=str, default="4e5_30s_4h_0120", help="输出文件名后缀")
+    parser.add_argument("--file-name", type=str, default="0210", help="输出文件名后缀")
     
     args = parser.parse_args()
 
